@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { UserAvatarProfile } from '@/components/user-avatar-profile';
+import { APP_VERSION_LABEL } from '@/lib/app-info';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 
@@ -51,11 +52,6 @@ export function UserNav() {
           <DropdownMenuItem onClick={() => router.push('/dashboard/profile')}>
             账户设置
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => router.push('/dashboard/workspaces/users')}
-          >
-            用户管理
-          </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem
@@ -63,6 +59,10 @@ export function UserNav() {
         >
           退出登录
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <div className='text-muted-foreground px-2 py-1.5 text-center text-xs'>
+          当前版本 {APP_VERSION_LABEL}
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

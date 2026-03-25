@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { getServerLocale } from '@/lib/i18n/server';
+import { APP_VERSION_LABEL } from '@/lib/app-info';
 
 export const metadata: Metadata = {
   title: 'About'
@@ -23,7 +24,7 @@ const copy = {
         body: '当前后端基础设施围绕 Neon PostgreSQL、Upstash Redis 和可选 S3 存储进行设计，方便部署到 Vercel 并持续扩展。'
       }
     ],
-    footer: '当前基线版本：0.1.0'
+    footer: `当前基线版本：${APP_VERSION_LABEL}`
   },
   en: {
     title: 'About',
@@ -43,7 +44,7 @@ const copy = {
         body: 'The platform is prepared for Neon PostgreSQL, Upstash Redis, and optional S3-compatible storage so it can be deployed to Vercel and iterated safely.'
       }
     ],
-    footer: 'Current baseline version: 0.1.0'
+    footer: `Current baseline version: ${APP_VERSION_LABEL}`
   }
 } as const;
 

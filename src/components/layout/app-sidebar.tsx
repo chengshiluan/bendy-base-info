@@ -32,12 +32,12 @@ import {
 import { UserAvatarProfile } from '@/components/user-avatar-profile';
 import { getNavItems } from '@/config/nav-config';
 import { useFilteredNavItems } from '@/hooks/use-nav';
+import { APP_VERSION_LABEL } from '@/lib/app-info';
 import {
   IconChevronRight,
   IconChevronsDown,
   IconLogout,
-  IconSettings,
-  IconUsers
+  IconSettings
 } from '@tabler/icons-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -166,12 +166,6 @@ export default function AppSidebar() {
                     <IconSettings className='mr-2 h-4 w-4' />
                     账户设置
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => router.push('/dashboard/workspaces/users')}
-                  >
-                    <IconUsers className='mr-2 h-4 w-4' />
-                    用户管理
-                  </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -180,6 +174,10 @@ export default function AppSidebar() {
                   <IconLogout className='mr-2 h-4 w-4' />
                   退出登录
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <div className='text-muted-foreground px-2 py-1.5 text-center text-xs'>
+                  当前版本 {APP_VERSION_LABEL}
+                </div>
               </DropdownMenuContent>
             </DropdownMenu>
           </SidebarMenuItem>

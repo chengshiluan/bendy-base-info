@@ -9,6 +9,7 @@ import {
   CardTitle
 } from '@/components/ui/card';
 import { DashboardCalendarTimeline } from '@/features/overview/components/dashboard-calendar-timeline';
+import { APP_VERSION_LABEL } from '@/lib/app-info';
 import { getDashboardMetrics } from '@/lib/platform/service';
 import {
   IconBellRinging,
@@ -47,7 +48,7 @@ export default async function OverViewLayout({
               CRUD、流程与上传能力。
             </p>
           </div>
-          <Badge variant='outline'>v0.1.0 Foundation</Badge>
+          <Badge variant='outline'>{APP_VERSION_LABEL} Foundation</Badge>
         </div>
 
         <div className='*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs md:grid-cols-2 xl:grid-cols-4'>
