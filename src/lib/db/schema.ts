@@ -1,0 +1,333 @@
+import {
+  boolean,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+  varchar
+} from 'drizzle-orm/pg-core';
+
+export const userStatusEnum = pgEnum('user_status', [
+  'active',
+  'invited',
+  'disabled'
+]);
+
+export const systemRoleEnum = pgEnum('system_role', [
+  'super_admin',
+  'admin',
+  'member'
+]);
+
+export const workspaceStatusEnum = pgEnum('workspace_status', [
+  'active',
+  'archived'
+]);
+
+export const ticketStatusEnum = pgEnum('ticket_status', [
+  'open',
+  'in_progress',
+  'resolved',
+  'closed'
+]);
+
+export const ticketPriorityEnum = pgEnum('ticket_priority', [
+  'low',
+  'medium',
+  'high',
+  'urgent'
+]);
+
+export const notificationLevelEnum = pgEnum('notification_level', [
+  'info',
+  'success',
+  'warning',
+  'error'
+]);
+
+export const fileEntityTypeEnum = pgEnum('file_entity_type', [
+  'ticket',
+  'ticket_comment',
+  'workspace',
+  'general'
+]);
+
+const timestamps = {
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull()
+};
+
+export const users = pgTable(
+  'users',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    githubUsername: varchar('github_username', { length: 39 }).notNull(),
+    githubUserId: varchar('github_user_id', { length: 32 }),
+    email: varchar('email', { length: 255 }),
+    displayName: varchar('display_name', { length: 120 }),
+    avatarUrl: text('avatar_url'),
+    bio: text('bio'),
+    systemRole: systemRoleEnum('system_role').default('member').notNull(),
+    status: userStatusEnum('status').default('invited').notNull(),
+    emailLoginEnabled: boolean('email_login_enabled').default(true).notNull(),
+    lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}),
+    ...timestamps
+  },
+  (table) => ({
+    githubUsernameIdx: uniqueIndex('users_github_username_idx').on(
+      table.githubUsername
+    ),
+    emailIdx: uniqueIndex('users_email_idx').on(table.email)
+  })
+);
+
+export const workspaces = pgTable(
+  'workspaces',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    slug: varchar('slug', { length: 80 }).notNull(),
+    name: varchar('name', { length: 120 }).notNull(),
+    description: text('description'),
+    status: workspaceStatusEnum('status').default('active').notNull(),
+    isDefault: boolean('is_default').default(false).notNull(),
+    ...timestamps
+  },
+  (table) => ({
+    slugIdx: uniqueIndex('workspaces_slug_idx').on(table.slug)
+  })
+);
+
+export const workspaceMembers = pgTable(
+  'workspace_members',
+  {
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    isOwner: boolean('is_owner').default(false).notNull(),
+    joinedAt: timestamp('joined_at', { withTimezone: true })
+      .defaultNow()
+      .notNull()
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.workspaceId, table.userId] })
+  })
+);
+
+export const teams = pgTable(
+  'teams',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    slug: varchar('slug', { length: 80 }).notNull(),
+    name: varchar('name', { length: 120 }).notNull(),
+    description: text('description'),
+    leadUserId: uuid('lead_user_id').references(() => users.id, {
+      onDelete: 'set null'
+    }),
+    ...timestamps
+  },
+  (table) => ({
+    workspaceSlugIdx: uniqueIndex('teams_workspace_slug_idx').on(
+      table.workspaceId,
+      table.slug
+    )
+  })
+);
+
+export const roles = pgTable(
+  'roles',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    key: varchar('key', { length: 80 }).notNull(),
+    name: varchar('name', { length: 120 }).notNull(),
+    description: text('description'),
+    isSystem: boolean('is_system').default(false).notNull(),
+    ...timestamps
+  },
+  (table) => ({
+    workspaceKeyIdx: uniqueIndex('roles_workspace_key_idx').on(
+      table.workspaceId,
+      table.key
+    )
+  })
+);
+
+export const permissions = pgTable(
+  'permissions',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    code: varchar('code', { length: 120 }).notNull(),
+    name: varchar('name', { length: 120 }).notNull(),
+    module: varchar('module', { length: 60 }).notNull(),
+    action: varchar('action', { length: 60 }).notNull(),
+    description: text('description'),
+    ...timestamps
+  },
+  (table) => ({
+    codeIdx: uniqueIndex('permissions_code_idx').on(table.code)
+  })
+);
+
+export const rolePermissions = pgTable(
+  'role_permissions',
+  {
+    roleId: uuid('role_id')
+      .notNull()
+      .references(() => roles.id, { onDelete: 'cascade' }),
+    permissionId: uuid('permission_id')
+      .notNull()
+      .references(() => permissions.id, { onDelete: 'cascade' })
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.roleId, table.permissionId] })
+  })
+);
+
+export const teamMembers = pgTable(
+  'team_members',
+  {
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    roleId: uuid('role_id').references(() => roles.id, {
+      onDelete: 'set null'
+    }),
+    joinedAt: timestamp('joined_at', { withTimezone: true })
+      .defaultNow()
+      .notNull()
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.teamId, table.userId] })
+  })
+);
+
+export const notifications = pgTable('notifications', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  workspaceId: uuid('workspace_id').references(() => workspaces.id, {
+    onDelete: 'cascade'
+  }),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  title: varchar('title', { length: 160 }).notNull(),
+  content: text('content').notNull(),
+  level: notificationLevelEnum('level').default('info').notNull(),
+  isRead: boolean('is_read').default(false).notNull(),
+  ...timestamps
+});
+
+export const tickets = pgTable(
+  'tickets',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    code: varchar('code', { length: 32 }).notNull(),
+    title: varchar('title', { length: 180 }).notNull(),
+    description: text('description'),
+    status: ticketStatusEnum('status').default('open').notNull(),
+    priority: ticketPriorityEnum('priority').default('medium').notNull(),
+    reporterId: uuid('reporter_id').references(() => users.id, {
+      onDelete: 'set null'
+    }),
+    assigneeId: uuid('assignee_id').references(() => users.id, {
+      onDelete: 'set null'
+    }),
+    commentCount: integer('comment_count').default(0).notNull(),
+    ...timestamps
+  },
+  (table) => ({
+    codeIdx: uniqueIndex('tickets_code_idx').on(table.code)
+  })
+);
+
+export const ticketComments = pgTable('ticket_comments', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  ticketId: uuid('ticket_id')
+    .notNull()
+    .references(() => tickets.id, { onDelete: 'cascade' }),
+  authorId: uuid('author_id').references(() => users.id, {
+    onDelete: 'set null'
+  }),
+  body: text('body').notNull(),
+  attachmentIds: jsonb('attachment_ids')
+    .$type<string[]>()
+    .default([])
+    .notNull(),
+  ...timestamps
+});
+
+export const fileAssets = pgTable('file_assets', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  workspaceId: uuid('workspace_id').references(() => workspaces.id, {
+    onDelete: 'cascade'
+  }),
+  entityType: fileEntityTypeEnum('entity_type').default('general').notNull(),
+  entityId: varchar('entity_id', { length: 120 }),
+  bucket: varchar('bucket', { length: 120 }),
+  objectKey: text('object_key').notNull(),
+  fileName: varchar('file_name', { length: 255 }).notNull(),
+  mimeType: varchar('mime_type', { length: 120 }),
+  size: integer('size').default(0).notNull(),
+  publicUrl: text('public_url'),
+  uploadedBy: uuid('uploaded_by').references(() => users.id, {
+    onDelete: 'set null'
+  }),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull()
+});
+
+export const auditLogs = pgTable('audit_logs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  workspaceId: uuid('workspace_id').references(() => workspaces.id, {
+    onDelete: 'set null'
+  }),
+  actorId: uuid('actor_id').references(() => users.id, {
+    onDelete: 'set null'
+  }),
+  action: varchar('action', { length: 120 }).notNull(),
+  entityType: varchar('entity_type', { length: 80 }).notNull(),
+  entityId: varchar('entity_id', { length: 120 }),
+  summary: text('summary').notNull(),
+  metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull()
+});
+
+export const schema = {
+  users,
+  workspaces,
+  workspaceMembers,
+  teams,
+  teamMembers,
+  roles,
+  permissions,
+  rolePermissions,
+  notifications,
+  tickets,
+  ticketComments,
+  fileAssets,
+  auditLogs
+};
