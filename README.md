@@ -23,30 +23,6 @@
 | ![Authentication](public/project/im-2.png) | ![Management](public/project/im-3.png) |
 | ![Workspace and Team](public/project/im-4.png) | ![Tickets and Kanban](public/project/im-5.png) |
 
-上面这组图已经直接接入 README 预览。如果你后面要继续补素材，建议统一放到 `docs/images/` 或 `public/project/`，不要混用大小写路径。
-
-### 建议继续补的素材
-
-- README 主图：`1600 x 900`
-- 模块截图：`1440 x 900`
-- 所有截图统一浅色主题、统一浏览器窗口边框、统一中文数据
-
-- `docs/images/hero-dashboard.png`
-  - 用途：README 首屏主图，建议展示登录后后台首页或概览页
-- `docs/images/auth-sign-in.png`
-  - 用途：认证页截图，展示 GitHub 登录 / 邮箱验证码登录入口
-- `docs/images/workspaces-management.png`
-  - 用途：工作区、团队、用户、角色、权限管理页
-- `docs/images/notifications-tickets.png`
-  - 用途：通知中心、工单列表或工单详情页
-- `docs/images/ticket-kanban.png`
-  - 用途：看板页或工单状态流转页
-
-如果你后面把图片改到 `docs/images/`，可以直接把当前预览区的路径替换成下面这种形式：
-
-```md
-![Bendywork Info Base](docs/images/hero-dashboard.png)
-```
 
 ## 这个项目是什么
 
