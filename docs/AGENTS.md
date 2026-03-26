@@ -28,7 +28,9 @@ This section has the highest priority for future project iterations.
 ### Delivery Rules
 
 - At the end of each development task, update `docs/maintain.md` with what was changed, how it was verified, and any remaining follow-up items.
-- After development is completed, default to `git commit` and `git push origin <current-branch>` unless the user explicitly says not to commit or not to push.
+- `git commit` and `git push origin <current-branch>` are mandatory delivery gates after every completed development task, not optional cleanup steps.
+- Only when the user explicitly instructs not to commit or not to push may either step be skipped.
+- If `git push` fails, record the blocker, retry status, and next action in `docs/maintain.md`; do not treat the task as fully delivered while the remote push remains unresolved.
 - Do not create new business or maintenance docs in the repository root. Use `docs/` as the documentation home.
 
 ---

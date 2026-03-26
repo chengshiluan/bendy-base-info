@@ -10,6 +10,13 @@
 
 ## 当前迭代
 
+### 2026-03-26 - 提交与远程推送硬指标化
+
+- [x] 将开发完成后的 `git commit + git push origin <current-branch>` 升级为规范文档中的硬性要求
+- [x] 在 `docs/AGENTS.md` 中明确只有用户明确禁止时才允许跳过提交或推送
+- [x] 在 `docs/maintain.md` 中补充 `git push` 失败时必须记录阻塞与重试状态
+- [x] 在 `docs/maintain.md` 中同步追加本次变更记录
+
 ### 2026-03-26 - 文档协作规范收口
 
 - [x] 明确 `docs/` 为除 README 外的文档主目录
