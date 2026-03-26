@@ -19,9 +19,6 @@ export default async function Page({
     <SignInViewPage
       githubEnabled={env.auth.githubEnabled}
       emailEnabled={env.auth.emailEnabled}
-      databaseEnabled={env.database.enabled}
-      redisEnabled={env.redis.enabled}
-      emailProviderEnabled={env.email.enabled}
       error={error}
     />
   );

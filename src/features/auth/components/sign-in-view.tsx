@@ -3,27 +3,34 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { signIn } from 'next-auth/react';
-import { AlertCircle, CheckCircle2, Github, Mail, Shield } from 'lucide-react';
-import { Button, buttonVariants } from '@/components/ui/button';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card';
+  AlertCircle,
+  CheckCircle2,
+  Github,
+  Mail,
+  Send,
+  Shield,
+  Workflow,
+  Zap
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
+import { ParticleBackground } from './particle-background';
+import { TypewriterText } from './typewriter-text';
 
 interface SignInViewPageProps {
   githubEnabled: boolean;
   emailEnabled: boolean;
-  databaseEnabled: boolean;
-  redisEnabled: boolean;
-  emailProviderEnabled: boolean;
   error?: string;
 }
+
+type LoginMode = 'github' | 'email';
+
+type Notice = {
+  tone: 'success' | 'error';
+  message: string;
+};
 
 const errorMessageMap: Record<string, string> = {
   github_not_allowed: '当前 GitHub 用户未被录入系统，无法登录。',
@@ -31,19 +38,41 @@ const errorMessageMap: Record<string, string> = {
   CredentialsSignin: '验证码无效或已过期，请重新发送验证码。'
 };
 
+const heroPhrases = [
+  '轻量、直接、可持续迭代的基础管理系统',
+  '把权限、工作区与流程骨架一次搭稳',
+  '减少重复造轮子，让开发时间回到业务本身',
+  '让后台模块按节奏扩展，而不是边做边返工'
+];
+
+const valueCards = [
+  {
+    title: '更快起盘',
+    description:
+      '把认证、权限、工作区这些共性能力先铺稳，业务模块可以直接往上接。',
+    icon: Zap
+  },
+  {
+    title: '更稳迭代',
+    description:
+      '保持边界清晰与结构简洁，后续扩通知、看板、工单时不用反复返工底层。',
+    icon: Workflow
+  }
+] as const;
+
 export default function SignInViewPage({
   githubEnabled,
   emailEnabled,
-  databaseEnabled,
-  redisEnabled,
-  emailProviderEnabled,
   error
 }: SignInViewPageProps) {
+  const [loginMode, setLoginMode] = useState<LoginMode>(
+    githubEnabled ? 'github' : 'email'
+  );
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [requestLoading, setRequestLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [devCode, setDevCode] = useState<string | null>(null);
 
   const errorMessage = useMemo(() => {
@@ -54,7 +83,26 @@ export default function SignInViewPage({
     return errorMessageMap[error] || '登录失败，请检查配置后重试。';
   }, [error]);
 
+  const switchLoginMode = (mode: LoginMode) => {
+    if (
+      (mode === 'github' && !githubEnabled) ||
+      (mode === 'email' && !emailEnabled)
+    ) {
+      return;
+    }
+
+    setLoginMode(mode);
+    setNotice(null);
+    setDevCode(null);
+  };
+
   const requestCode = async () => {
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) {
+      setNotice({ tone: 'error', message: '请先输入邮箱地址。' });
+      return;
+    }
+
     setRequestLoading(true);
     setNotice(null);
     setDevCode(null);
@@ -65,7 +113,7 @@ export default function SignInViewPage({
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ email: normalizedEmail })
       });
 
       const payload = (await response.json()) as {
@@ -77,24 +125,42 @@ export default function SignInViewPage({
         throw new Error(payload.message || '发送验证码失败。');
       }
 
-      setNotice(payload.message || '验证码已发送。');
+      setNotice({
+        tone: 'success',
+        message: payload.message || '验证码已发送。'
+      });
       setDevCode(payload.devCode || null);
     } catch (requestError) {
-      setNotice(
-        requestError instanceof Error
-          ? requestError.message
-          : '发送验证码失败，请稍后再试。'
-      );
+      setNotice({
+        tone: 'error',
+        message:
+          requestError instanceof Error
+            ? requestError.message
+            : '发送验证码失败，请稍后再试。'
+      });
     } finally {
       setRequestLoading(false);
     }
   };
 
   const submitEmailCode = async () => {
+    const normalizedEmail = email.trim();
+    const normalizedCode = code.trim();
+
+    if (!normalizedEmail || normalizedCode.length !== 6) {
+      setNotice({
+        tone: 'error',
+        message: '请输入邮箱并填写 6 位验证码。'
+      });
+      return;
+    }
+
     setSubmitLoading(true);
+    setNotice(null);
+
     const result = await signIn('email-code', {
-      email,
-      code,
+      email: normalizedEmail,
+      code: normalizedCode,
       redirect: false,
       callbackUrl: '/dashboard/overview'
     });
@@ -104,180 +170,287 @@ export default function SignInViewPage({
       return;
     }
 
-    setNotice('验证码校验失败，请确认输入正确。');
+    setNotice({
+      tone: 'error',
+      message: '验证码校验失败，请确认输入正确。'
+    });
     setSubmitLoading(false);
   };
 
   return (
-    <div className='bg-muted/30 flex min-h-screen items-center justify-center px-4 py-10'>
-      <div className='grid w-full max-w-6xl gap-6 lg:grid-cols-[1.15fr_0.85fr]'>
-        <div className='from-background via-background to-muted hidden rounded-3xl border bg-gradient-to-br p-10 lg:flex lg:flex-col lg:justify-between'>
-          <div className='space-y-6'>
-            <span className='text-primary inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-medium'>
-              <Shield className='h-4 w-4' />
-              Bendywork Base
-            </span>
-            <div className='space-y-3'>
-              <h1 className='text-4xl font-semibold tracking-tight'>
-                轻量、直接、可持续迭代的基础管理系统
-              </h1>
-              <p className='text-muted-foreground max-w-xl text-base leading-7'>
-                本系统不开放注册，只允许已录入的 GitHub 用户名或已授权邮箱登录。
-                这一版会以超级管理员视角先把工作区、团队、权限、通知、看板和工单这些基础模块搭稳。
-              </p>
+    <div className='bg-background text-foreground relative min-h-screen overflow-hidden'>
+      <ParticleBackground />
+      <div className='pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(15,23,42,0.08),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(15,23,42,0.05),transparent_28%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.14),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.08),transparent_28%)]' />
+
+      <div className='relative mx-auto grid min-h-screen w-full max-w-[1440px] gap-6 px-4 py-4 sm:px-6 sm:py-6 lg:grid-cols-[minmax(0,1.15fr)_480px] lg:px-8 lg:py-8'>
+        <section className='border-border/70 bg-background/70 relative overflow-hidden rounded-[2rem] border p-6 shadow-2xl backdrop-blur-xl sm:p-8 lg:p-10'>
+          <div className='via-foreground/25 absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent to-transparent' />
+
+          <div className='flex h-full flex-col justify-between gap-10'>
+            <div className='space-y-8'>
+              <div className='border-border/70 bg-background/75 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium shadow-sm backdrop-blur'>
+                <Shield className='h-4 w-4' />
+                Bendywork Base
+              </div>
+
+              <div className='space-y-5'>
+                <p className='text-muted-foreground text-xs font-medium tracking-[0.32em] uppercase sm:text-sm'>
+                  Build Faster
+                </p>
+                <div className='min-h-[144px] sm:min-h-[168px] lg:min-h-[224px]'>
+                  <h1 className='max-w-4xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl lg:text-6xl'>
+                    <TypewriterText phrases={heroPhrases} />
+                  </h1>
+                </div>
+                <div className='text-muted-foreground max-w-2xl space-y-3 text-sm leading-7 sm:text-base'>
+                  <p>
+                    系统不开放注册，只允许已录入的 GitHub
+                    用户名或已授权邮箱登录。
+                  </p>
+                  <p>
+                    先把认证、权限、工作区这些通用地基搭稳，再把开发节奏留给真正的业务需求。
+                  </p>
+                  <p>
+                    结构保持轻量，扩展保持直接，后续每一轮迭代都能更可控地往前推进。
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className='grid gap-4 xl:grid-cols-2'>
+              {valueCards.map((card) => {
+                const Icon = card.icon;
+
+                return (
+                  <div
+                    key={card.title}
+                    className='border-border/70 bg-background/60 rounded-[1.75rem] border p-6 shadow-lg backdrop-blur-sm'
+                  >
+                    <div className='bg-muted/80 mb-5 inline-flex h-12 w-12 items-center justify-center rounded-2xl'>
+                      <Icon className='h-5 w-5' />
+                    </div>
+                    <h2 className='text-xl font-semibold'>{card.title}</h2>
+                    <p className='text-muted-foreground mt-3 text-sm leading-7'>
+                      {card.description}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           </div>
-          <div className='grid gap-3 sm:grid-cols-2'>
-            <Card>
-              <CardHeader>
-                <CardTitle className='text-base'>GitHub 用户即账户</CardTitle>
-                <CardDescription>
-                  用户录入时只需要维护 GitHub 用户名。
-                </CardDescription>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className='text-base'>邮箱验证码登录</CardTitle>
-                <CardDescription>
-                  通过 Upstash Redis 临时存储验证码，配置邮件服务后即可启用。
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          </div>
-        </div>
+        </section>
 
-        <Card className='mx-auto w-full max-w-xl rounded-3xl border shadow-sm'>
-          <CardHeader className='space-y-2'>
-            <CardTitle className='text-2xl'>登录系统</CardTitle>
-            <CardDescription>
-              仅允许管理员提前录入的 GitHub 用户名或邮箱进入系统。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className='space-y-6'>
-            {errorMessage && (
-              <Alert variant='destructive'>
-                <AlertCircle className='h-4 w-4' />
-                <AlertTitle>登录失败</AlertTitle>
-                <AlertDescription>{errorMessage}</AlertDescription>
-              </Alert>
-            )}
+        <section className='border-border/70 bg-background/80 relative overflow-hidden rounded-[2rem] border p-5 shadow-2xl backdrop-blur-xl sm:p-8'>
+          <div className='via-foreground/30 absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent to-transparent' />
 
-            {notice && (
-              <Alert>
-                <CheckCircle2 className='h-4 w-4' />
-                <AlertTitle>状态提醒</AlertTitle>
-                <AlertDescription>
-                  <div>{notice}</div>
-                  {devCode && (
-                    <div className='mt-2 text-sm'>
-                      开发环境验证码：
-                      <span className='font-semibold'>{devCode}</span>
+          <div className='flex h-full flex-col justify-between gap-8'>
+            <div className='space-y-6'>
+              <div className='space-y-3 text-center sm:text-left'>
+                <p className='text-muted-foreground text-xs font-medium tracking-[0.28em] uppercase'>
+                  Access Portal
+                </p>
+                <div className='space-y-2'>
+                  <h2 className='text-3xl font-semibold tracking-tight sm:text-4xl'>
+                    登录系统
+                  </h2>
+                  <p className='text-muted-foreground text-sm leading-6'>
+                    只为已授权成员开放，进入方式切到你需要的那一个就行。
+                  </p>
+                </div>
+              </div>
+
+              {(errorMessage || notice) && (
+                <div className='space-y-3'>
+                  {errorMessage && (
+                    <div className='border-destructive/30 bg-destructive/10 flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm'>
+                      <AlertCircle className='text-destructive mt-0.5 h-4 w-4 shrink-0' />
+                      <p className='leading-6'>{errorMessage}</p>
                     </div>
                   )}
-                </AlertDescription>
-              </Alert>
-            )}
 
-            <div className='space-y-3'>
-              <Button
-                className='w-full'
-                size='lg'
-                disabled={!githubEnabled}
-                onClick={() =>
-                  signIn('github', { callbackUrl: '/dashboard/overview' })
-                }
-              >
-                <Github className='mr-2 h-4 w-4' />
-                通过 GitHub 登录
-              </Button>
-              {!githubEnabled && (
-                <p className='text-muted-foreground text-sm'>
-                  GitHub OAuth 尚未配置，请后续补充 `GITHUB_ID` 与
-                  `GITHUB_SECRET`。
-                </p>
+                  {notice && (
+                    <div
+                      className={cn(
+                        'flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm',
+                        notice.tone === 'success'
+                          ? 'border-emerald-500/25 bg-emerald-500/10'
+                          : 'border-destructive/30 bg-destructive/10'
+                      )}
+                    >
+                      {notice.tone === 'success' ? (
+                        <CheckCircle2 className='mt-0.5 h-4 w-4 shrink-0 text-emerald-500' />
+                      ) : (
+                        <AlertCircle className='text-destructive mt-0.5 h-4 w-4 shrink-0' />
+                      )}
+                      <div className='space-y-2 leading-6'>
+                        <p>{notice.message}</p>
+                        {devCode && (
+                          <p className='text-muted-foreground text-xs sm:text-sm'>
+                            开发环境验证码：
+                            <span className='text-foreground ml-2 rounded-md border px-2 py-1 font-mono'>
+                              {devCode}
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
-            </div>
 
-            <div className='relative'>
-              <div className='absolute inset-0 flex items-center'>
-                <span className='w-full border-t' />
-              </div>
-              <div className='relative flex justify-center text-xs uppercase'>
-                <span className='bg-background text-muted-foreground px-2'>
-                  或使用邮箱验证码
-                </span>
-              </div>
-            </div>
-
-            <div className='space-y-4'>
-              <div className='space-y-2'>
-                <label className='text-sm font-medium'>邮箱地址</label>
-                <Input
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  type='email'
-                  placeholder='you@example.com'
-                />
-              </div>
-
-              <div className='grid gap-3 sm:grid-cols-[1fr_auto]'>
-                <div className='space-y-2'>
-                  <label className='text-sm font-medium'>验证码</label>
-                  <Input
-                    value={code}
-                    onChange={(event) => setCode(event.target.value)}
-                    inputMode='numeric'
-                    maxLength={6}
-                    placeholder='6 位验证码'
-                  />
-                </div>
-                <Button
-                  variant='outline'
-                  className='self-end'
-                  disabled={!emailEnabled || !email || requestLoading}
-                  onClick={requestCode}
+              <div className='bg-muted/60 grid grid-cols-2 gap-1 rounded-full p-1'>
+                <button
+                  type='button'
+                  className={cn(
+                    'rounded-full px-4 py-3 text-sm font-medium transition sm:px-5',
+                    loginMode === 'github'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground',
+                    !githubEnabled && 'cursor-not-allowed opacity-40'
+                  )}
+                  onClick={() => switchLoginMode('github')}
+                  aria-pressed={loginMode === 'github'}
                 >
-                  <Mail className='mr-2 h-4 w-4' />
-                  {requestLoading ? '发送中...' : '发送验证码'}
-                </Button>
+                  GitHub 授权
+                </button>
+                <button
+                  type='button'
+                  className={cn(
+                    'rounded-full px-4 py-3 text-sm font-medium transition sm:px-5',
+                    loginMode === 'email'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground',
+                    !emailEnabled && 'cursor-not-allowed opacity-40'
+                  )}
+                  onClick={() => switchLoginMode('email')}
+                  aria-pressed={loginMode === 'email'}
+                >
+                  邮箱验证码
+                </button>
               </div>
 
-              <Button
-                className='w-full'
-                size='lg'
-                disabled={
-                  !emailEnabled || !email || code.length !== 6 || submitLoading
-                }
-                onClick={submitEmailCode}
+              <div className='border-border/70 bg-background/50 rounded-[1.75rem] border p-5 sm:p-6'>
+                {loginMode === 'github' ? (
+                  <div className='flex min-h-[360px] flex-col items-center justify-center text-center'>
+                    <button
+                      type='button'
+                      className={cn(
+                        'border-border/80 bg-background flex h-24 w-24 items-center justify-center rounded-full border shadow-lg transition duration-300',
+                        githubEnabled
+                          ? 'hover:-translate-y-1 hover:shadow-2xl'
+                          : 'cursor-not-allowed opacity-50'
+                      )}
+                      onClick={() =>
+                        githubEnabled &&
+                        signIn('github', { callbackUrl: '/dashboard/overview' })
+                      }
+                      disabled={!githubEnabled}
+                    >
+                      <Github className='h-10 w-10' />
+                    </button>
+
+                    <div className='mt-8 space-y-3'>
+                      <h3 className='text-2xl font-semibold'>
+                        GitHub 授权登录
+                      </h3>
+                      <p className='text-muted-foreground mx-auto max-w-sm text-sm leading-7'>
+                        点击中央 GitHub 图标，直接跳转授权流程并进入系统。
+                      </p>
+                      {!githubEnabled && (
+                        <p className='text-destructive text-sm leading-6'>
+                          当前环境未启用 GitHub 登录，请切换到邮箱验证码方式。
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <form
+                    className='flex min-h-[360px] flex-col justify-center space-y-4'
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void submitEmailCode();
+                    }}
+                  >
+                    <div className='space-y-2'>
+                      <label className='text-sm font-medium'>邮箱地址</label>
+                      <div className='relative'>
+                        <Mail className='text-muted-foreground absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2' />
+                        <Input
+                          value={email}
+                          onChange={(event) => setEmail(event.target.value)}
+                          type='email'
+                          placeholder='you@example.com'
+                          className='border-border/70 bg-background/70 h-12 rounded-2xl pl-11'
+                        />
+                      </div>
+                    </div>
+
+                    <div className='grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end'>
+                      <div className='space-y-2'>
+                        <label className='text-sm font-medium'>验证码</label>
+                        <Input
+                          value={code}
+                          onChange={(event) => setCode(event.target.value)}
+                          inputMode='numeric'
+                          maxLength={6}
+                          placeholder='6 位验证码'
+                          className='border-border/70 bg-background/70 h-12 rounded-2xl'
+                        />
+                      </div>
+                      <Button
+                        type='button'
+                        variant='outline'
+                        className='h-12 rounded-2xl px-5'
+                        disabled={
+                          !emailEnabled || !email.trim() || requestLoading
+                        }
+                        onClick={() => void requestCode()}
+                      >
+                        <Send className='h-4 w-4' />
+                        {requestLoading ? '发送中' : '发送'}
+                      </Button>
+                    </div>
+
+                    <Button
+                      className='h-12 w-full rounded-2xl text-base font-medium'
+                      size='lg'
+                      disabled={
+                        !emailEnabled ||
+                        !email.trim() ||
+                        code.trim().length !== 6 ||
+                        submitLoading
+                      }
+                    >
+                      {submitLoading ? '登录中...' : '使用验证码登录'}
+                    </Button>
+
+                    <p className='text-muted-foreground text-sm leading-6'>
+                      仅限已授权邮箱使用，验证码有效期为 10 分钟。
+                      {!emailEnabled && ' 当前环境未启用邮箱验证码登录。'}
+                    </p>
+                  </form>
+                )}
+              </div>
+            </div>
+
+            <div className='text-muted-foreground flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs sm:justify-start'>
+              <span>系统不开放注册</span>
+              <span className='hidden h-1 w-1 rounded-full bg-current/40 sm:inline-flex' />
+              <Link
+                href='/terms-of-service'
+                className='hover:text-foreground transition'
               >
-                {submitLoading ? '登录中...' : '使用验证码登录'}
-              </Button>
+                服务条款
+              </Link>
+              <Link
+                href='/privacy-policy'
+                className='hover:text-foreground transition'
+              >
+                隐私政策
+              </Link>
             </div>
-
-            <div className='rounded-2xl border p-4'>
-              <div className='mb-3 text-sm font-medium'>当前基础设施状态</div>
-              <div className='grid gap-2 text-sm'>
-                <div>PostgreSQL: {databaseEnabled ? '已就绪' : '待配置'}</div>
-                <div>Upstash Redis: {redisEnabled ? '已就绪' : '待配置'}</div>
-                <div>GitHub OAuth: {githubEnabled ? '已就绪' : '待配置'}</div>
-                <div>
-                  邮件服务:{' '}
-                  {emailProviderEnabled
-                    ? '已就绪'
-                    : '待配置，当前会输出开发日志'}
-                </div>
-              </div>
-            </div>
-
-            <Link
-              href='/dashboard/overview'
-              className={cn(buttonVariants({ variant: 'ghost' }), 'w-full')}
-            >
-              查看系统结构
-            </Link>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       </div>
     </div>
   );
