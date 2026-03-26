@@ -65,7 +65,8 @@ export function NotificationsManagementClient({
   memberOptions
 }: NotificationsManagementClientProps) {
   const [notifications, setNotifications] = useState(initialNotifications);
-  const [search, setSearch] = useState('');
+  const [searchDraft, setSearchDraft] = useState('');
+  const [searchKeyword, setSearchKeyword] = useState('');
   const [filter, setFilter] = useState<NotificationFilter>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -78,7 +79,7 @@ export function NotificationsManagementClient({
   const [form, setForm] = useState<NotificationFormState>(createDefaultForm());
 
   const filteredNotifications = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = searchKeyword.trim().toLowerCase();
 
     return notifications.filter((notification) => {
       const matchesFilter =
@@ -92,7 +93,7 @@ export function NotificationsManagementClient({
 
       return matchesFilter && matchesKeyword;
     });
-  }, [filter, notifications, search]);
+  }, [filter, notifications, searchKeyword]);
 
   async function refreshNotifications() {
     if (!workspaceId) {
@@ -127,6 +128,11 @@ export function NotificationsManagementClient({
       targetType
     });
     setDialogOpen(true);
+  }
+
+  function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSearchKeyword(searchDraft.trim());
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -220,43 +226,58 @@ export function NotificationsManagementClient({
     <>
       <Card>
         <CardHeader className='flex flex-col gap-4'>
-          <div className='flex flex-col gap-4 md:flex-row md:items-center md:justify-between'>
-            <div>
-              <CardTitle>站内消息中心</CardTitle>
-              <CardDescription>
-                支持工作区广播、指定成员通知和系统广播，适合作为日常运维与协作提醒入口。
-              </CardDescription>
-            </div>
-            <Button onClick={openCreateDialog}>发布通知</Button>
+          <div>
+            <CardTitle>站内消息中心</CardTitle>
+            <CardDescription>
+              支持工作区广播、指定成员通知和系统广播，适合作为日常运维与协作提醒入口。
+            </CardDescription>
           </div>
-          <div className='flex flex-col gap-3 md:flex-row md:items-center'>
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder='搜索标题 / 内容 / 目标对象'
-              className='md:w-80'
-            />
-            <div className='flex gap-2'>
-              <Button
-                variant={filter === 'all' ? 'default' : 'outline'}
-                onClick={() => setFilter('all')}
+          <form
+            className='flex flex-col gap-3 lg:flex-row lg:items-center'
+            onSubmit={handleSearchSubmit}
+          >
+            <div className='border-input bg-background focus-within:border-ring focus-within:ring-ring/50 flex w-full min-w-0 items-center rounded-md border shadow-xs transition-[color,box-shadow] focus-within:ring-[3px] lg:max-w-xl'>
+              <Input
+                value={searchDraft}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setSearchDraft(value);
+
+                  if (!value.trim()) {
+                    setSearchKeyword('');
+                  }
+                }}
+                placeholder='搜索标题 / 内容 / 目标对象'
+                className='h-9 border-0 bg-transparent shadow-none focus-visible:border-transparent focus-visible:ring-0'
+              />
+              <Select
+                value={filter}
+                onValueChange={(value: NotificationFilter) => setFilter(value)}
               >
-                全部
-              </Button>
-              <Button
-                variant={filter === 'unread' ? 'default' : 'outline'}
-                onClick={() => setFilter('unread')}
-              >
-                未读
-              </Button>
-              <Button
-                variant={filter === 'read' ? 'default' : 'outline'}
-                onClick={() => setFilter('read')}
-              >
-                已读
-              </Button>
+                <SelectTrigger
+                  aria-label='通知状态筛选'
+                  className='text-muted-foreground h-9 w-[7.5rem] shrink-0 rounded-none border-0 bg-transparent px-3 shadow-none focus-visible:border-transparent focus-visible:ring-0'
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='all'>全部</SelectItem>
+                  <SelectItem value='unread'>未读</SelectItem>
+                  <SelectItem value='read'>已读</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </div>
+            <Button type='submit' variant='outline' className='lg:shrink-0'>
+              搜索
+            </Button>
+            <Button
+              type='button'
+              className='lg:shrink-0'
+              onClick={openCreateDialog}
+            >
+              发布
+            </Button>
+          </form>
         </CardHeader>
         <CardContent className='space-y-4'>
           {filteredNotifications.map((notification) => (

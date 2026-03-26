@@ -40,32 +40,26 @@ export function getNavItems(_translate: (key: string) => string): NavItem[] {
           url: '/dashboard/workspaces/permissions',
           icon: 'key',
           access: { requireWorkspace: true }
+        },
+        {
+          title: '站内消息',
+          url: '/dashboard/workspaces/notifications',
+          icon: 'notification',
+          access: { requireWorkspace: true }
+        },
+        {
+          title: '工单系统',
+          url: '/dashboard/workspaces/tickets',
+          icon: 'ticket',
+          access: { requireWorkspace: true }
+        },
+        {
+          title: '看板',
+          url: '/dashboard/workspaces/kanban',
+          icon: 'kanban',
+          access: { requireWorkspace: true }
         }
       ]
-    },
-    {
-      title: '站内消息',
-      url: '/dashboard/notifications',
-      icon: 'notification',
-      shortcut: ['n', 'n'],
-      isActive: false,
-      items: []
-    },
-    {
-      title: '看板',
-      url: '/dashboard/kanban',
-      icon: 'kanban',
-      shortcut: ['k', 'k'],
-      isActive: false,
-      items: []
-    },
-    {
-      title: '工单系统',
-      url: '/dashboard/tickets',
-      icon: 'ticket',
-      shortcut: ['t', 't'],
-      isActive: false,
-      items: []
     }
   ];
 }
