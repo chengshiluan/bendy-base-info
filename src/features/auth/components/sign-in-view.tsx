@@ -182,7 +182,7 @@ export default function SignInViewPage({
       <ParticleBackground />
       <div className='pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(15,23,42,0.08),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(15,23,42,0.05),transparent_28%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.14),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.08),transparent_28%)]' />
 
-      <div className='relative mx-auto grid min-h-screen w-full max-w-[1440px] gap-6 px-4 py-4 sm:px-6 sm:py-6 lg:grid-cols-[minmax(0,1.15fr)_480px] lg:px-8 lg:py-8'>
+      <div className='auth-page-scale relative mx-auto grid min-h-screen w-full max-w-[1440px] gap-6 px-4 py-4 sm:px-6 sm:py-6 lg:grid-cols-[minmax(0,1.15fr)_480px] lg:px-8 lg:py-8'>
         <section className='border-border/70 bg-background/70 relative overflow-hidden rounded-[2rem] border p-6 shadow-2xl backdrop-blur-xl sm:p-8 lg:p-10'>
           <div className='via-foreground/25 absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent to-transparent' />
 
@@ -254,7 +254,7 @@ export default function SignInViewPage({
                     登录系统
                   </h2>
                   <p className='text-muted-foreground text-sm leading-6'>
-                    只为已授权成员开放，进入方式切到你需要的那一个就行。
+                    本系统为工作室内部系统，不开放注册。
                   </p>
                 </div>
               </div>
@@ -354,7 +354,7 @@ export default function SignInViewPage({
                         GitHub 授权登录
                       </h3>
                       <p className='text-muted-foreground mx-auto max-w-sm text-sm leading-7'>
-                        点击中央 GitHub 图标，直接跳转授权流程并进入系统。
+                        请点击 GitHub 图标，授权登录并进入系统。
                       </p>
                       {!githubEnabled && (
                         <p className='text-destructive text-sm leading-6'>
