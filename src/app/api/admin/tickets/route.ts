@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { requireManagerApi } from '@/lib/auth/api-guard';
+import { forbidden, requireApiPermission } from '@/lib/auth/api-guard';
+import { hasPermission } from '@/lib/auth/permission';
 import {
   getPaginationParams,
   getSearchParam,
@@ -7,12 +8,16 @@ import {
   parseJsonRequest
 } from '@/lib/platform/api';
 import { createTicket } from '@/lib/platform/mutations';
+import { actionPermissionCode, menuPermissionCode } from '@/lib/platform/rbac';
 import { listTicketsPage } from '@/lib/platform/service';
 import { ticketPayloadSchema } from '@/lib/platform/validators';
 
 export async function GET(request: Request) {
   const workspaceId = getSearchParam(request, 'workspaceId');
-  const { response } = await requireManagerApi(workspaceId);
+  const { response } = await requireApiPermission(
+    menuPermissionCode('dashboard', 'workspaces', 'tickets'),
+    workspaceId
+  );
 
   if (response) {
     return response;
@@ -49,12 +54,24 @@ export async function POST(request: Request) {
     );
   }
 
-  const { session, response } = await requireManagerApi(
+  const { session, response } = await requireApiPermission(
+    actionPermissionCode('create', 'dashboard', 'workspaces', 'tickets'),
     parsed.data.workspaceId
   );
 
   if (response || !session) {
     return response;
+  }
+
+  if (
+    parsed.data.assigneeId &&
+    !hasPermission(
+      session.user,
+      actionPermissionCode('assign', 'dashboard', 'workspaces', 'tickets'),
+      parsed.data.workspaceId
+    )
+  ) {
+    return forbidden('当前没有在创建时分配负责人的权限。');
   }
 
   try {

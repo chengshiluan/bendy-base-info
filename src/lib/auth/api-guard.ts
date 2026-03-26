@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
+import { hasAnyPermission, hasPermission } from './permission';
 
 type ApiSession = NonNullable<Awaited<ReturnType<typeof getApiSession>>>;
 
@@ -88,6 +89,62 @@ export async function requireSuperAdminApi() {
     return {
       session: null,
       response: forbidden('当前仅超级管理员可以执行该操作。')
+    };
+  }
+
+  return { session, response: null };
+}
+
+export async function requireApiPermission(
+  permissionCode: string,
+  workspaceId?: string | null,
+  message = '你没有执行该操作的权限。'
+) {
+  const { session, response } = await requireApiSession();
+
+  if (response || !session) {
+    return { session: null, response };
+  }
+
+  if (workspaceId && !canAccessWorkspace(session, workspaceId)) {
+    return {
+      session: null,
+      response: forbidden('你无法访问当前工作区。')
+    };
+  }
+
+  if (!hasPermission(session.user, permissionCode, workspaceId)) {
+    return {
+      session: null,
+      response: forbidden(message)
+    };
+  }
+
+  return { session, response: null };
+}
+
+export async function requireAnyApiPermission(
+  permissionCodes: string[],
+  workspaceId?: string | null,
+  message = '你没有执行该操作的权限。'
+) {
+  const { session, response } = await requireApiSession();
+
+  if (response || !session) {
+    return { session: null, response };
+  }
+
+  if (workspaceId && !canAccessWorkspace(session, workspaceId)) {
+    return {
+      session: null,
+      response: forbidden('你无法访问当前工作区。')
+    };
+  }
+
+  if (!hasAnyPermission(session.user, permissionCodes, workspaceId)) {
+    return {
+      session: null,
+      response: forbidden(message)
     };
   }
 

@@ -7,6 +7,7 @@ declare module 'next-auth' {
     githubUsername: string;
     systemRole: 'super_admin' | 'admin' | 'member';
     permissions: string[];
+    workspacePermissions: Record<string, string[]>;
     workspaceIds: string[];
     defaultWorkspaceId: string | null;
     name: string | null;
@@ -20,6 +21,7 @@ declare module 'next-auth' {
       githubUsername: string;
       systemRole: 'super_admin' | 'admin' | 'member';
       permissions: string[];
+      workspacePermissions: Record<string, string[]>;
       workspaceIds: string[];
       defaultWorkspaceId: string | null;
       name: string | null;
@@ -35,6 +37,7 @@ declare module 'next-auth/jwt' {
     githubUsername?: string;
     systemRole?: 'super_admin' | 'admin' | 'member';
     permissions?: string[];
+    workspacePermissions?: Record<string, string[]>;
     workspaceIds?: string[];
     defaultWorkspaceId?: string | null;
   }

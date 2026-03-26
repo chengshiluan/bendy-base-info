@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireManagerApi } from '@/lib/auth/api-guard';
+import { requireApiPermission } from '@/lib/auth/api-guard';
 import {
   getSearchParam,
   handlePlatformError,
@@ -14,6 +14,7 @@ import {
   notificationPayloadSchema,
   notificationReadPayloadSchema
 } from '@/lib/platform/validators';
+import { actionPermissionCode } from '@/lib/platform/rbac';
 
 export async function PUT(
   request: Request,
@@ -30,8 +31,13 @@ export async function PUT(
     );
   }
 
-  const { session, response } = await requireManagerApi(
-    parsed.data.workspaceId ?? undefined
+  const workspaceId =
+    getSearchParam(request, 'workspaceId') ??
+    parsed.data.workspaceId ??
+    undefined;
+  const { session, response } = await requireApiPermission(
+    actionPermissionCode('update', 'dashboard', 'workspaces', 'notifications'),
+    workspaceId
   );
 
   if (response || !session) {
@@ -66,7 +72,10 @@ export async function PATCH(
     );
   }
 
-  const { session, response } = await requireManagerApi(workspaceId);
+  const { session, response } = await requireApiPermission(
+    actionPermissionCode('read', 'dashboard', 'workspaces', 'notifications'),
+    workspaceId
+  );
 
   if (response || !session) {
     return response;
@@ -91,7 +100,10 @@ export async function DELETE(
 ) {
   const routeParams = await params;
   const workspaceId = getSearchParam(request, 'workspaceId');
-  const { session, response } = await requireManagerApi(workspaceId);
+  const { session, response } = await requireApiPermission(
+    actionPermissionCode('delete', 'dashboard', 'workspaces', 'notifications'),
+    workspaceId
+  );
 
   if (response || !session) {
     return response;

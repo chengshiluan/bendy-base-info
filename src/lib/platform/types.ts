@@ -30,6 +30,8 @@ export interface UserSummary {
   status: 'active' | 'invited' | 'disabled';
   emailLoginEnabled?: boolean;
   workspaceIds?: string[];
+  roleIds?: string[];
+  roleNames?: string[];
 }
 
 export interface RoleSummary {
@@ -49,6 +51,13 @@ export interface PermissionSummary {
   action: string;
   code: string;
   name: string;
+  scope: 'global' | 'workspace';
+  permissionType: 'menu' | 'action';
+  parentCode?: string | null;
+  route?: string | null;
+  sortOrder: number;
+  isSystem: boolean;
+  pathLabel: string;
   description?: string | null;
 }
 

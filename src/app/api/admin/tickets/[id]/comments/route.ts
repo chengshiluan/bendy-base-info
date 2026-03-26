@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
-import { requireManagerApi } from '@/lib/auth/api-guard';
+import { requireApiPermission } from '@/lib/auth/api-guard';
 import {
   getSearchParam,
   handlePlatformError,
   parseJsonRequest
 } from '@/lib/platform/api';
 import { addTicketComment } from '@/lib/platform/mutations';
+import { actionPermissionCode, menuPermissionCode } from '@/lib/platform/rbac';
 import { listTicketComments } from '@/lib/platform/service';
 import { ticketCommentPayloadSchema } from '@/lib/platform/validators';
 
@@ -15,7 +16,10 @@ export async function GET(
 ) {
   const routeParams = await params;
   const workspaceId = getSearchParam(request, 'workspaceId');
-  const { response } = await requireManagerApi(workspaceId);
+  const { response } = await requireApiPermission(
+    menuPermissionCode('dashboard', 'workspaces', 'tickets'),
+    workspaceId
+  );
 
   if (response) {
     return response;
@@ -41,7 +45,10 @@ export async function POST(
     );
   }
 
-  const { session, response } = await requireManagerApi(workspaceId);
+  const { session, response } = await requireApiPermission(
+    actionPermissionCode('comment', 'dashboard', 'workspaces', 'tickets'),
+    workspaceId
+  );
 
   if (response || !session) {
     return response;

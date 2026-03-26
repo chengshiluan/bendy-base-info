@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireManagerApi } from '@/lib/auth/api-guard';
+import { requireApiPermission } from '@/lib/auth/api-guard';
 import {
   getPaginationParams,
   getSearchParam,
@@ -7,12 +7,16 @@ import {
   parseJsonRequest
 } from '@/lib/platform/api';
 import { createNotification } from '@/lib/platform/mutations';
+import { actionPermissionCode, menuPermissionCode } from '@/lib/platform/rbac';
 import { listAdminNotificationsPage } from '@/lib/platform/service';
 import { notificationPayloadSchema } from '@/lib/platform/validators';
 
 export async function GET(request: Request) {
   const workspaceId = getSearchParam(request, 'workspaceId');
-  const { response } = await requireManagerApi(workspaceId);
+  const { response } = await requireApiPermission(
+    menuPermissionCode('dashboard', 'workspaces', 'notifications'),
+    workspaceId
+  );
 
   if (response) {
     return response;
@@ -47,8 +51,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const { session, response } = await requireManagerApi(
-    parsed.data.workspaceId ?? undefined
+  const workspaceId =
+    getSearchParam(request, 'workspaceId') ??
+    parsed.data.workspaceId ??
+    undefined;
+  const { session, response } = await requireApiPermission(
+    actionPermissionCode('create', 'dashboard', 'workspaces', 'notifications'),
+    workspaceId
   );
 
   if (response || !session) {

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { requireSuperAdminApi } from '@/lib/auth/api-guard';
+import { requireApiPermission } from '@/lib/auth/api-guard';
 import { handlePlatformError, parseJsonRequest } from '@/lib/platform/api';
 import { archiveWorkspace, updateWorkspace } from '@/lib/platform/mutations';
+import { actionPermissionCode } from '@/lib/platform/rbac';
 import { workspacePayloadSchema } from '@/lib/platform/validators';
 
 export async function PUT(
@@ -19,7 +20,9 @@ export async function PUT(
     );
   }
 
-  const { session, response } = await requireSuperAdminApi();
+  const { session, response } = await requireApiPermission(
+    actionPermissionCode('update', 'dashboard', 'workspaces')
+  );
 
   if (response || !session) {
     return response;
@@ -42,7 +45,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const routeParams = await params;
-  const { session, response } = await requireSuperAdminApi();
+  const { session, response } = await requireApiPermission(
+    actionPermissionCode('archive', 'dashboard', 'workspaces')
+  );
 
   if (response || !session) {
     return response;

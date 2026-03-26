@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
-import { requireManagerApi } from '@/lib/auth/api-guard';
+import { requireApiPermission } from '@/lib/auth/api-guard';
 import { searchGithubUsers, GithubApiError } from '@/lib/platform/github';
+import { actionPermissionCode } from '@/lib/platform/rbac';
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const workspaceId = url.searchParams.get('workspaceId') ?? undefined;
   const query = url.searchParams.get('query')?.trim() ?? '';
-  const { response } = await requireManagerApi(workspaceId);
+  const { response } = await requireApiPermission(
+    actionPermissionCode('import', 'dashboard', 'workspaces', 'teams'),
+    workspaceId
+  );
 
   if (response) {
     return response;

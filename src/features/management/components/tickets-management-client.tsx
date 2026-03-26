@@ -67,6 +67,14 @@ interface TicketsManagementClientProps {
   initialPagination: PaginationMeta;
   workspaceId?: string;
   memberOptions: OptionItem[];
+  access: {
+    canCreate: boolean;
+    canUpdate: boolean;
+    canDelete: boolean;
+    canAssign: boolean;
+    canComment: boolean;
+    canUpload: boolean;
+  };
 }
 
 type TicketFilter = 'all' | TicketSummary['status'];
@@ -104,7 +112,8 @@ export function TicketsManagementClient({
   initialTickets,
   initialPagination,
   workspaceId,
-  memberOptions
+  memberOptions,
+  access
 }: TicketsManagementClientProps) {
   const [tickets, setTickets] = useState(initialTickets);
   const [pagination, setPagination] = useState(initialPagination);
@@ -134,6 +143,7 @@ export function TicketsManagementClient({
   const [uploadedFiles, setUploadedFiles] = useState<FileAssetSummary[]>([]);
   const [commentBody, setCommentBody] = useState('');
   const [form, setForm] = useState<TicketFormState>(createDefaultForm());
+  const canManageAny = access.canUpdate || access.canDelete;
 
   async function refreshTickets() {
     if (!workspaceId) {
@@ -242,12 +252,20 @@ export function TicketsManagementClient({
   }
 
   function openCreateDialog() {
+    if (!access.canCreate) {
+      return;
+    }
+
     setEditingTicket(null);
     setForm(createDefaultForm());
     setDialogOpen(true);
   }
 
   function openEditDialog(ticket: TicketSummary) {
+    if (!access.canUpdate) {
+      return;
+    }
+
     setEditingTicket(ticket);
     setForm({
       title: ticket.title,
@@ -343,7 +361,7 @@ export function TicketsManagementClient({
   }
 
   async function handleCommentSubmit() {
-    if (!selectedTicket || !workspaceId || !commentBody.trim()) {
+    if (!access.canComment || !selectedTicket || !workspaceId || !commentBody.trim()) {
       return;
     }
 
@@ -376,6 +394,10 @@ export function TicketsManagementClient({
   }
 
   async function handleUpload(filesToUpload: File[]) {
+    if (!access.canUpload) {
+      throw new Error('当前没有上传附件的权限。');
+    }
+
     if (!selectedTicket || !workspaceId) {
       throw new Error('请先打开一个工单详情，再上传附件。');
     }
@@ -476,13 +498,15 @@ export function TicketsManagementClient({
             <Button type='submit' variant='outline' className='shrink-0'>
               搜索
             </Button>
-            <Button
-              type='button'
-              className='shrink-0'
-              onClick={openCreateDialog}
-            >
-              新建工单
-            </Button>
+            {access.canCreate ? (
+              <Button
+                type='button'
+                className='shrink-0'
+                onClick={openCreateDialog}
+              >
+                新建工单
+              </Button>
+            ) : null}
           </form>
         </CardHeader>
         <CardContent>
@@ -528,23 +552,27 @@ export function TicketsManagementClient({
                       >
                         详情
                       </Button>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => openEditDialog(ticket)}
-                      >
-                        编辑
-                      </Button>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => {
-                          setDeletingTicket(ticket);
-                          setDeleteOpen(true);
-                        }}
-                      >
-                        删除
-                      </Button>
+                      {access.canUpdate ? (
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          onClick={() => openEditDialog(ticket)}
+                        >
+                          编辑
+                        </Button>
+                      ) : null}
+                      {access.canDelete ? (
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          onClick={() => {
+                            setDeletingTicket(ticket);
+                            setDeleteOpen(true);
+                          }}
+                        >
+                          删除
+                        </Button>
+                      ) : null}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -665,6 +693,7 @@ export function TicketsManagementClient({
                       assigneeId: value === 'none' ? '' : value
                     }))
                   }
+                  disabled={!access.canAssign}
                 >
                   <SelectTrigger className='w-full'>
                     <SelectValue />
@@ -734,18 +763,20 @@ export function TicketsManagementClient({
                   <p className='text-muted-foreground leading-6 whitespace-pre-wrap'>
                     {selectedTicket.description || '暂无描述。'}
                   </p>
-                  <div className='flex gap-2'>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      onClick={() => {
-                        openEditDialog(selectedTicket);
-                        setDetailOpen(false);
-                      }}
-                    >
-                      编辑工单
-                    </Button>
-                  </div>
+                  {access.canUpdate ? (
+                    <div className='flex gap-2'>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={() => {
+                          openEditDialog(selectedTicket);
+                          setDetailOpen(false);
+                        }}
+                      >
+                        编辑工单
+                      </Button>
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
 
@@ -757,24 +788,28 @@ export function TicketsManagementClient({
                   </CardDescription>
                 </CardHeader>
                 <CardContent className='space-y-4'>
-                  <FileUploader
-                    maxFiles={5}
-                    multiple
-                    accept={{ '*/*': [] }}
-                    onUpload={handleUpload}
-                  />
-                  {uploadedFiles.length > 0 && (
-                    <div className='rounded-md border border-dashed p-3 text-sm'>
-                      已上传待评论引用：
-                      <div className='mt-2 flex flex-wrap gap-2'>
-                        {uploadedFiles.map((file) => (
-                          <Badge key={file.id} variant='outline'>
-                            {file.fileName}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  {access.canUpload ? (
+                    <>
+                      <FileUploader
+                        maxFiles={5}
+                        multiple
+                        accept={{ '*/*': [] }}
+                        onUpload={handleUpload}
+                      />
+                      {uploadedFiles.length > 0 && (
+                        <div className='rounded-md border border-dashed p-3 text-sm'>
+                          已上传待评论引用：
+                          <div className='mt-2 flex flex-wrap gap-2'>
+                            {uploadedFiles.map((file) => (
+                              <Badge key={file.id} variant='outline'>
+                                {file.fileName}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : null}
                   {detailLoading ? (
                     <p className='text-muted-foreground text-sm'>
                       附件加载中...
@@ -820,22 +855,26 @@ export function TicketsManagementClient({
                   <CardTitle className='text-base'>评论流</CardTitle>
                 </CardHeader>
                 <CardContent className='space-y-4'>
-                  <div className='grid gap-2'>
-                    <label className='text-sm font-medium'>新增评论</label>
-                    <Textarea
-                      value={commentBody}
-                      onChange={(event) => setCommentBody(event.target.value)}
-                      placeholder='补充处理进度、结论或协作说明'
-                    />
-                  </div>
-                  <div className='flex justify-end'>
-                    <Button
-                      disabled={commentPending || !commentBody.trim()}
-                      onClick={handleCommentSubmit}
-                    >
-                      {commentPending ? '提交中...' : '提交评论'}
-                    </Button>
-                  </div>
+                  {access.canComment ? (
+                    <>
+                      <div className='grid gap-2'>
+                        <label className='text-sm font-medium'>新增评论</label>
+                        <Textarea
+                          value={commentBody}
+                          onChange={(event) => setCommentBody(event.target.value)}
+                          placeholder='补充处理进度、结论或协作说明'
+                        />
+                      </div>
+                      <div className='flex justify-end'>
+                        <Button
+                          disabled={commentPending || !commentBody.trim()}
+                          onClick={handleCommentSubmit}
+                        >
+                          {commentPending ? '提交中...' : '提交评论'}
+                        </Button>
+                      </div>
+                    </>
+                  ) : null}
                   {detailLoading ? (
                     <p className='text-muted-foreground text-sm'>
                       评论加载中...

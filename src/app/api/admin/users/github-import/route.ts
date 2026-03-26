@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { requireManagerApi } from '@/lib/auth/api-guard';
+import { requireApiPermission } from '@/lib/auth/api-guard';
 import { handlePlatformError, parseJsonRequest } from '@/lib/platform/api';
 import { importGithubUsersToWorkspace } from '@/lib/platform/mutations';
+import { actionPermissionCode } from '@/lib/platform/rbac';
 import { githubUserImportPayloadSchema } from '@/lib/platform/validators';
 
 export async function POST(request: Request) {
@@ -15,7 +16,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const { session, response } = await requireManagerApi(
+  const { session, response } = await requireApiPermission(
+    actionPermissionCode('import', 'dashboard', 'workspaces', 'teams'),
     parsed.data.workspaceId
   );
 

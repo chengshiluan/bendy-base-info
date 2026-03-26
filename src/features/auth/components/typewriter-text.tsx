@@ -58,7 +58,7 @@ export function TypewriterText({ phrases }: TypewriterTextProps) {
   }, [displayText, isDeleting, phraseIndex, phrases]);
 
   return (
-    <span className='inline whitespace-pre-wrap'>
+    <span className='inline-block max-w-full break-words whitespace-normal'>
       {displayText || '\u00A0'}
       <span
         aria-hidden='true'

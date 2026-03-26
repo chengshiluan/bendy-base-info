@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireManagerApi, requireSuperAdminApi } from '@/lib/auth/api-guard';
+import { requireApiPermission } from '@/lib/auth/api-guard';
 import {
   getPaginationParams,
   getSearchParam,
@@ -7,6 +7,7 @@ import {
   parseJsonRequest
 } from '@/lib/platform/api';
 import { createWorkspace } from '@/lib/platform/mutations';
+import { actionPermissionCode, menuPermissionCode } from '@/lib/platform/rbac';
 import {
   getWorkspaceSummaryMetrics,
   listWorkspacesPage
@@ -14,7 +15,9 @@ import {
 import { workspacePayloadSchema } from '@/lib/platform/validators';
 
 export async function GET(request: Request) {
-  const { session, response } = await requireManagerApi();
+  const { session, response } = await requireApiPermission(
+    menuPermissionCode('dashboard', 'workspaces')
+  );
 
   if (response || !session) {
     return response;
@@ -47,7 +50,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const { session, response } = await requireSuperAdminApi();
+  const { session, response } = await requireApiPermission(
+    actionPermissionCode('create', 'dashboard', 'workspaces')
+  );
 
   if (response || !session) {
     return response;

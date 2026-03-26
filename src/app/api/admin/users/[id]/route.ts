@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
-import { requireManagerApi } from '@/lib/auth/api-guard';
+import { requireApiPermission } from '@/lib/auth/api-guard';
 import {
   getSearchParam,
   handlePlatformError,
   parseJsonRequest
 } from '@/lib/platform/api';
 import { deleteUser, updateUser } from '@/lib/platform/mutations';
+import { actionPermissionCode } from '@/lib/platform/rbac';
 import { userPayloadSchema } from '@/lib/platform/validators';
 
 export async function PUT(
@@ -23,7 +24,8 @@ export async function PUT(
     );
   }
 
-  const { session, response } = await requireManagerApi(
+  const { session, response } = await requireApiPermission(
+    actionPermissionCode('update', 'dashboard', 'workspaces', 'users'),
     parsed.data.workspaceId
   );
 
@@ -45,7 +47,10 @@ export async function DELETE(
 ) {
   const routeParams = await params;
   const workspaceId = getSearchParam(request, 'workspaceId');
-  const { session, response } = await requireManagerApi(workspaceId);
+  const { session, response } = await requireApiPermission(
+    actionPermissionCode('delete', 'dashboard', 'workspaces', 'users'),
+    workspaceId
+  );
 
   if (response || !session) {
     return response;

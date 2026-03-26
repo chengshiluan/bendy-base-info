@@ -29,6 +29,7 @@ import { getTicketPriorityLabel, getTicketStatusLabel } from '../lib/display';
 interface TicketKanbanClientProps {
   initialTickets: TicketSummary[];
   workspaceId?: string;
+  canUpdate: boolean;
 }
 
 const columns: Array<{
@@ -48,12 +49,14 @@ const columns: Array<{
 
 interface TicketCardProps {
   ticket: TicketSummary;
+  canDrag: boolean;
 }
 
-function TicketCard({ ticket }: TicketCardProps) {
+function TicketCard({ ticket, canDrag }: TicketCardProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
       id: ticket.id,
+      disabled: !canDrag,
       data: {
         ticketId: ticket.id,
         status: ticket.status
@@ -71,8 +74,8 @@ function TicketCard({ ticket }: TicketCardProps) {
       className={`bg-background rounded-lg border p-4 shadow-sm transition ${
         isDragging ? 'opacity-60' : 'opacity-100'
       }`}
-      {...attributes}
-      {...listeners}
+      {...(canDrag ? attributes : {})}
+      {...(canDrag ? listeners : {})}
     >
       <div className='mb-3 flex items-center justify-between gap-2'>
         <p className='text-sm font-semibold'>{ticket.code}</p>
@@ -92,9 +95,10 @@ function TicketCard({ ticket }: TicketCardProps) {
 interface KanbanColumnProps {
   column: (typeof columns)[number];
   tickets: TicketSummary[];
+  canDrag: boolean;
 }
 
-function KanbanColumn({ column, tickets }: KanbanColumnProps) {
+function KanbanColumn({ column, tickets, canDrag }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.id
   });
@@ -117,7 +121,7 @@ function KanbanColumn({ column, tickets }: KanbanColumnProps) {
       </div>
       <div className='space-y-3'>
         {tickets.map((ticket) => (
-          <TicketCard key={ticket.id} ticket={ticket} />
+          <TicketCard key={ticket.id} ticket={ticket} canDrag={canDrag} />
         ))}
         {!tickets.length && (
           <div className='text-muted-foreground rounded-lg border border-dashed py-10 text-center text-sm'>
@@ -131,7 +135,8 @@ function KanbanColumn({ column, tickets }: KanbanColumnProps) {
 
 export function TicketKanbanClient({
   initialTickets,
-  workspaceId
+  workspaceId,
+  canUpdate
 }: TicketKanbanClientProps) {
   const [tickets, setTickets] = useState(initialTickets);
   const [search, setSearch] = useState('');
@@ -166,7 +171,7 @@ export function TicketKanbanClient({
     const overId = event.over?.id;
     const activeId = event.active.id;
 
-    if (!workspaceId || !overId) {
+    if (!canUpdate || !workspaceId || !overId) {
       return;
     }
 
@@ -239,6 +244,11 @@ export function TicketKanbanClient({
             刷新看板
           </Button>
         </div>
+        {!canUpdate ? (
+          <p className='text-muted-foreground text-sm'>
+            当前角色仅可查看看板，不能拖拽更新状态。
+          </p>
+        ) : null}
         <Input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
@@ -253,9 +263,12 @@ export function TicketKanbanClient({
               <KanbanColumn
                 key={column.id}
                 column={column}
-                tickets={filteredTickets.filter(
-                  (ticket) => ticket.status === column.id
-                )}
+                canDrag={canUpdate}
+                tickets={filteredTickets
+                  .filter((ticket) => ticket.status === column.id)
+                  .map((ticket) => ({
+                    ...ticket
+                  }))}
               />
             ))}
           </div>

@@ -49,6 +49,11 @@ interface RolesManagementClientProps {
   initialPagination: PaginationMeta;
   workspaceId?: string;
   permissionOptions: OptionItem[];
+  access: {
+    canCreate: boolean;
+    canUpdate: boolean;
+    canDelete: boolean;
+  };
 }
 
 type RoleFormState = {
@@ -71,7 +76,8 @@ export function RolesManagementClient({
   initialRoles,
   initialPagination,
   workspaceId,
-  permissionOptions
+  permissionOptions,
+  access
 }: RolesManagementClientProps) {
   const [roles, setRoles] = useState(initialRoles);
   const [pagination, setPagination] = useState(initialPagination);
@@ -254,6 +260,8 @@ export function RolesManagementClient({
     );
   }
 
+  const canManageAny = access.canUpdate || access.canDelete;
+
   return (
     <>
       <Card>
@@ -274,7 +282,9 @@ export function RolesManagementClient({
               placeholder='搜索角色键 / 名称 / 描述'
               className='md:w-80'
             />
-            <Button onClick={openCreateDialog}>新增角色</Button>
+            {access.canCreate ? (
+              <Button onClick={openCreateDialog}>新增角色</Button>
+            ) : null}
           </div>
         </CardHeader>
         <CardContent>
@@ -286,7 +296,7 @@ export function RolesManagementClient({
                 <TableHead>权限数</TableHead>
                 <TableHead>类型</TableHead>
                 <TableHead>说明</TableHead>
-                <TableHead>操作</TableHead>
+                {canManageAny ? <TableHead>操作</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -303,34 +313,40 @@ export function RolesManagementClient({
                   <TableCell className='max-w-md whitespace-normal'>
                     {role.description}
                   </TableCell>
-                  <TableCell>
-                    <div className='flex gap-2'>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => openEditDialog(role)}
-                      >
-                        编辑
-                      </Button>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        disabled={role.isSystem}
-                        onClick={() => {
-                          setDeletingRole(role);
-                          setDeleteOpen(true);
-                        }}
-                      >
-                        删除
-                      </Button>
-                    </div>
-                  </TableCell>
+                  {canManageAny ? (
+                    <TableCell>
+                      <div className='flex gap-2'>
+                        {access.canUpdate ? (
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            onClick={() => openEditDialog(role)}
+                          >
+                            编辑
+                          </Button>
+                        ) : null}
+                        {access.canDelete ? (
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            disabled={role.isSystem}
+                            onClick={() => {
+                              setDeletingRole(role);
+                              setDeleteOpen(true);
+                            }}
+                          >
+                            删除
+                          </Button>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
               {!roles.length && (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={canManageAny ? 6 : 5}
                     className='text-muted-foreground py-10 text-center'
                   >
                     当前没有匹配的角色记录。
@@ -349,97 +365,99 @@ export function RolesManagementClient({
         </CardContent>
       </Card>
 
-      <Dialog
-        open={dialogOpen}
-        onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (!open) {
-            setEditingRole(null);
-            setForm(createDefaultForm());
-          }
-        }}
-      >
-        <DialogContent className='max-w-2xl'>
-          <DialogHeader>
-            <DialogTitle>{editingRole ? '编辑角色' : '新增角色'}</DialogTitle>
-            <DialogDescription>
-              角色键建议使用英文标识，权限可以直接按业务模块绑定。
-            </DialogDescription>
-          </DialogHeader>
-          <form className='space-y-4' onSubmit={handleSubmit}>
-            <div className='grid gap-2 md:grid-cols-2'>
+      {access.canCreate || access.canUpdate ? (
+        <Dialog
+          open={dialogOpen}
+          onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) {
+              setEditingRole(null);
+              setForm(createDefaultForm());
+            }
+          }}
+        >
+          <DialogContent className='max-w-2xl'>
+            <DialogHeader>
+              <DialogTitle>{editingRole ? '编辑角色' : '新增角色'}</DialogTitle>
+              <DialogDescription>
+                角色键建议使用英文标识，权限会自动补齐上级菜单节点。
+              </DialogDescription>
+            </DialogHeader>
+            <form className='space-y-4' onSubmit={handleSubmit}>
+              <div className='grid gap-2 md:grid-cols-2'>
+                <div className='grid gap-2'>
+                  <label className='text-sm font-medium'>角色键</label>
+                  <Input
+                    value={form.key}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        key: event.target.value
+                      }))
+                    }
+                    placeholder='例如 operator_manager'
+                    required
+                  />
+                </div>
+                <div className='grid gap-2'>
+                  <label className='text-sm font-medium'>角色名称</label>
+                  <Input
+                    value={form.name}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        name: event.target.value
+                      }))
+                    }
+                    placeholder='例如 运营管理员'
+                    required
+                  />
+                </div>
+              </div>
               <div className='grid gap-2'>
-                <label className='text-sm font-medium'>角色键</label>
-                <Input
-                  value={form.key}
+                <label className='text-sm font-medium'>角色说明</label>
+                <Textarea
+                  value={form.description}
                   onChange={(event) =>
                     setForm((current) => ({
                       ...current,
-                      key: event.target.value
+                      description: event.target.value
                     }))
                   }
-                  placeholder='例如 operator_manager'
-                  required
+                  placeholder='描述这个角色负责的业务范围'
                 />
               </div>
               <div className='grid gap-2'>
-                <label className='text-sm font-medium'>角色名称</label>
-                <Input
-                  value={form.name}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      name: event.target.value
-                    }))
+                <label className='text-sm font-medium'>绑定权限</label>
+                <OptionCheckboxGroup
+                  options={permissionOptions}
+                  value={form.permissionIds}
+                  onChange={(permissionIds) =>
+                    setForm((current) => ({ ...current, permissionIds }))
                   }
-                  placeholder='例如 运营管理员'
-                  required
+                  emptyLabel='当前还没有可绑定的权限。'
                 />
               </div>
-            </div>
-            <div className='grid gap-2'>
-              <label className='text-sm font-medium'>角色说明</label>
-              <Textarea
-                value={form.description}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    description: event.target.value
-                  }))
-                }
-                placeholder='描述这个角色负责的业务范围'
-              />
-            </div>
-            <div className='grid gap-2'>
-              <label className='text-sm font-medium'>绑定权限</label>
-              <OptionCheckboxGroup
-                options={permissionOptions}
-                value={form.permissionIds}
-                onChange={(permissionIds) =>
-                  setForm((current) => ({ ...current, permissionIds }))
-                }
-                emptyLabel='当前还没有可绑定的权限，请先去权限管理中创建。'
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                type='button'
-                variant='outline'
-                onClick={() => setDialogOpen(false)}
-              >
-                取消
-              </Button>
-              <Button type='submit' disabled={submitPending}>
-                {submitPending
-                  ? '保存中...'
-                  : editingRole
-                    ? '保存修改'
-                    : '创建角色'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+              <DialogFooter>
+                <Button
+                  type='button'
+                  variant='outline'
+                  onClick={() => setDialogOpen(false)}
+                >
+                  取消
+                </Button>
+                <Button type='submit' disabled={submitPending}>
+                  {submitPending
+                    ? '保存中...'
+                    : editingRole
+                      ? '保存修改'
+                      : '创建角色'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      ) : null}
 
       <ConfirmActionDialog
         open={deleteOpen}

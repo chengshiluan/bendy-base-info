@@ -1,9 +1,10 @@
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { requireManagerApi, unavailable } from '@/lib/auth/api-guard';
+import { requireApiPermission, unavailable } from '@/lib/auth/api-guard';
 import { env } from '@/lib/env';
 import { saveFileAsset } from '@/lib/platform/mutations';
+import { actionPermissionCode } from '@/lib/platform/rbac';
 import { getS3Client, getS3PublicUrl } from '@/lib/storage/s3';
 import { slugify } from '@/lib/utils';
 
@@ -34,7 +35,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const { session, response } = await requireManagerApi(
+  const permissionCode =
+    parsed.data.entityType === 'ticket' ||
+    parsed.data.entityType === 'ticket_comment'
+      ? actionPermissionCode('upload', 'dashboard', 'workspaces', 'tickets')
+      : actionPermissionCode('update', 'dashboard', 'workspaces');
+  const { session, response } = await requireApiPermission(
+    permissionCode,
     parsed.data.workspaceId
   );
 

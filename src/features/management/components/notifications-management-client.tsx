@@ -47,6 +47,12 @@ interface NotificationsManagementClientProps {
   initialPagination: PaginationMeta;
   workspaceId?: string;
   memberOptions: OptionItem[];
+  access: {
+    canCreate: boolean;
+    canUpdate: boolean;
+    canRead: boolean;
+    canDelete: boolean;
+  };
 }
 
 type NotificationFilter = 'all' | 'unread' | 'read';
@@ -74,7 +80,8 @@ export function NotificationsManagementClient({
   initialNotifications,
   initialPagination,
   workspaceId,
-  memberOptions
+  memberOptions,
+  access
 }: NotificationsManagementClientProps) {
   const [notifications, setNotifications] = useState(initialNotifications);
   const [pagination, setPagination] = useState(initialPagination);
@@ -92,6 +99,7 @@ export function NotificationsManagementClient({
   const [deletingNotification, setDeletingNotification] =
     useState<NotificationSummary | null>(null);
   const [form, setForm] = useState<NotificationFormState>(createDefaultForm());
+  const canManageAny = access.canUpdate || access.canDelete;
 
   async function refreshNotifications() {
     const data = await requestJson<{
@@ -222,7 +230,7 @@ export function NotificationsManagementClient({
 
       if (editingNotification) {
         await requestJson(
-          `/api/admin/notifications/${editingNotification.id}`,
+          `/api/admin/notifications/${editingNotification.id}?workspaceId=${workspaceId ?? ''}`,
           {
             method: 'PUT',
             body: JSON.stringify(payload)
@@ -230,10 +238,13 @@ export function NotificationsManagementClient({
         );
         toast.success('通知已更新。');
       } else {
-        await requestJson('/api/admin/notifications', {
-          method: 'POST',
-          body: JSON.stringify(payload)
-        });
+        await requestJson(
+          `/api/admin/notifications?workspaceId=${workspaceId ?? ''}`,
+          {
+            method: 'POST',
+            body: JSON.stringify(payload)
+          }
+        );
         toast.success('通知已发布。');
       }
 
@@ -344,13 +355,15 @@ export function NotificationsManagementClient({
             <Button type='submit' variant='outline' className='lg:shrink-0'>
               搜索
             </Button>
-            <Button
-              type='button'
-              className='lg:shrink-0'
-              onClick={openCreateDialog}
-            >
-              发布
-            </Button>
+            {access.canCreate ? (
+              <Button
+                type='button'
+                className='lg:shrink-0'
+                onClick={openCreateDialog}
+              >
+                发布
+              </Button>
+            ) : null}
           </form>
         </CardHeader>
         <CardContent className='space-y-4'>
@@ -384,32 +397,41 @@ export function NotificationsManagementClient({
                   {notification.content}
                 </p>
                 <div className='flex flex-wrap gap-2'>
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    onClick={() => openEditDialog(notification)}
-                  >
-                    编辑
-                  </Button>
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    onClick={() =>
-                      void handleToggleRead(notification, !notification.isRead)
-                    }
-                  >
-                    {notification.isRead ? '恢复未读' : '标记已读'}
-                  </Button>
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    onClick={() => {
-                      setDeletingNotification(notification);
-                      setDeleteOpen(true);
-                    }}
-                  >
-                    删除
-                  </Button>
+                  {access.canRead ? (
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => openEditDialog(notification)}
+                    >
+                      编辑
+                    </Button>
+                  ) : null}
+                  {access.canUpdate ? (
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() =>
+                        void handleToggleRead(
+                          notification,
+                          !notification.isRead
+                        )
+                      }
+                    >
+                      {notification.isRead ? '恢复未读' : '标记已读'}
+                    </Button>
+                  ) : null}
+                  {access.canDelete ? (
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => {
+                        setDeletingNotification(notification);
+                        setDeleteOpen(true);
+                      }}
+                    >
+                      删除
+                    </Button>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>
@@ -427,145 +449,147 @@ export function NotificationsManagementClient({
         </CardContent>
       </Card>
 
-      <Dialog
-        open={dialogOpen}
-        onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (!open) {
-            setEditingNotification(null);
-            setForm(createDefaultForm());
-          }
-        }}
-      >
-        <DialogContent className='max-w-2xl'>
-          <DialogHeader>
-            <DialogTitle>
-              {editingNotification ? '编辑通知' : '发布通知'}
-            </DialogTitle>
-            <DialogDescription>
-              可以选择当前工作区广播、指定成员或系统广播，消息内容支持长文本。
-            </DialogDescription>
-          </DialogHeader>
-          <form className='space-y-4' onSubmit={handleSubmit}>
-            <div className='grid gap-2'>
-              <label className='text-sm font-medium'>通知标题</label>
-              <Input
-                value={form.title}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    title: event.target.value
-                  }))
-                }
-                placeholder='例如 数据库维护窗口提醒'
-                required
-              />
-            </div>
-            <div className='grid gap-2 md:grid-cols-2'>
+      {access.canCreate || access.canUpdate ? (
+        <Dialog
+          open={dialogOpen}
+          onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) {
+              setEditingNotification(null);
+              setForm(createDefaultForm());
+            }
+          }}
+        >
+          <DialogContent className='max-w-2xl'>
+            <DialogHeader>
+              <DialogTitle>
+                {editingNotification ? '编辑通知' : '发布通知'}
+              </DialogTitle>
+              <DialogDescription>
+                可以选择当前工作区广播、指定成员或系统广播，消息内容支持长文本。
+              </DialogDescription>
+            </DialogHeader>
+            <form className='space-y-4' onSubmit={handleSubmit}>
               <div className='grid gap-2'>
-                <label className='text-sm font-medium'>通知级别</label>
-                <Select
-                  value={form.level}
-                  onValueChange={(value: NotificationFormState['level']) =>
-                    setForm((current) => ({ ...current, level: value }))
-                  }
-                >
-                  <SelectTrigger className='w-full'>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value='info'>普通</SelectItem>
-                    <SelectItem value='success'>成功</SelectItem>
-                    <SelectItem value='warning'>警告</SelectItem>
-                    <SelectItem value='error'>紧急</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className='grid gap-2'>
-                <label className='text-sm font-medium'>通知目标</label>
-                <Select
-                  value={form.targetType}
-                  onValueChange={(value: NotificationTargetType) =>
+                <label className='text-sm font-medium'>通知标题</label>
+                <Input
+                  value={form.title}
+                  onChange={(event) =>
                     setForm((current) => ({
                       ...current,
-                      targetType: value,
-                      userId: value === 'user' ? current.userId : ''
+                      title: event.target.value
                     }))
                   }
-                >
-                  <SelectTrigger className='w-full'>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value='workspace'>当前工作区</SelectItem>
-                    <SelectItem value='user'>指定成员</SelectItem>
-                    <SelectItem value='global'>系统广播</SelectItem>
-                  </SelectContent>
-                </Select>
+                  placeholder='例如 数据库维护窗口提醒'
+                  required
+                />
               </div>
-            </div>
-            {form.targetType === 'user' && (
+              <div className='grid gap-2 md:grid-cols-2'>
+                <div className='grid gap-2'>
+                  <label className='text-sm font-medium'>通知级别</label>
+                  <Select
+                    value={form.level}
+                    onValueChange={(value: NotificationFormState['level']) =>
+                      setForm((current) => ({ ...current, level: value }))
+                    }
+                  >
+                    <SelectTrigger className='w-full'>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='info'>普通</SelectItem>
+                      <SelectItem value='success'>成功</SelectItem>
+                      <SelectItem value='warning'>警告</SelectItem>
+                      <SelectItem value='error'>紧急</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className='grid gap-2'>
+                  <label className='text-sm font-medium'>通知目标</label>
+                  <Select
+                    value={form.targetType}
+                    onValueChange={(value: NotificationTargetType) =>
+                      setForm((current) => ({
+                        ...current,
+                        targetType: value,
+                        userId: value === 'user' ? current.userId : ''
+                      }))
+                    }
+                  >
+                    <SelectTrigger className='w-full'>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='workspace'>当前工作区</SelectItem>
+                      <SelectItem value='user'>指定成员</SelectItem>
+                      <SelectItem value='global'>系统广播</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {form.targetType === 'user' && (
+                <div className='grid gap-2'>
+                  <label className='text-sm font-medium'>指定成员</label>
+                  <Select
+                    value={form.userId}
+                    onValueChange={(value) =>
+                      setForm((current) => ({ ...current, userId: value }))
+                    }
+                    disabled={!memberOptions.length}
+                  >
+                    <SelectTrigger className='w-full'>
+                      <SelectValue
+                        placeholder={
+                          memberOptions.length
+                            ? '请选择接收成员'
+                            : '当前工作区暂无可选成员'
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {memberOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className='grid gap-2'>
-                <label className='text-sm font-medium'>指定成员</label>
-                <Select
-                  value={form.userId}
-                  onValueChange={(value) =>
-                    setForm((current) => ({ ...current, userId: value }))
+                <label className='text-sm font-medium'>通知内容</label>
+                <Textarea
+                  value={form.content}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      content: event.target.value
+                    }))
                   }
-                  disabled={!memberOptions.length}
-                >
-                  <SelectTrigger className='w-full'>
-                    <SelectValue
-                      placeholder={
-                        memberOptions.length
-                          ? '请选择接收成员'
-                          : '当前工作区暂无可选成员'
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {memberOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  placeholder='请输入消息正文'
+                  required
+                />
               </div>
-            )}
-            <div className='grid gap-2'>
-              <label className='text-sm font-medium'>通知内容</label>
-              <Textarea
-                value={form.content}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    content: event.target.value
-                  }))
-                }
-                placeholder='请输入消息正文'
-                required
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                type='button'
-                variant='outline'
-                onClick={() => setDialogOpen(false)}
-              >
-                取消
-              </Button>
-              <Button type='submit' disabled={submitPending}>
-                {submitPending
-                  ? '保存中...'
-                  : editingNotification
-                    ? '保存修改'
-                    : '立即发布'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+              <DialogFooter>
+                <Button
+                  type='button'
+                  variant='outline'
+                  onClick={() => setDialogOpen(false)}
+                >
+                  取消
+                </Button>
+                <Button type='submit' disabled={submitPending}>
+                  {submitPending
+                    ? '保存中...'
+                    : editingNotification
+                      ? '保存修改'
+                      : '立即发布'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      ) : null}
 
       <ConfirmActionDialog
         open={deleteOpen}

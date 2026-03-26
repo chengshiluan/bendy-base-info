@@ -198,7 +198,7 @@ export default function SignInViewPage({
                   Build Faster
                 </p>
                 <div className='min-h-[144px] sm:min-h-[168px] lg:min-h-[224px]'>
-                  <h1 className='max-w-4xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl lg:text-6xl'>
+                  <h1 className='max-w-4xl text-4xl font-semibold tracking-tight break-words whitespace-normal sm:text-5xl lg:text-6xl'>
                     <TypewriterText phrases={heroPhrases} />
                   </h1>
                 </div>

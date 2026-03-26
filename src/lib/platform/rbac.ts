@@ -1,11 +1,21 @@
 export type SystemRoleKey = 'super_admin' | 'admin' | 'member';
 
+export type PermissionScope = 'global' | 'workspace';
+export type PermissionType = 'menu' | 'action';
+
 export interface PermissionSeed {
   code: string;
   module: string;
   action: string;
   name: string;
   description: string;
+  scope: PermissionScope;
+  permissionType: PermissionType;
+  parentCode: string | null;
+  route: string | null;
+  sortOrder: number;
+  isSystem: boolean;
+  pathLabel: string;
 }
 
 export interface SystemRoleSeed {
@@ -15,241 +25,528 @@ export interface SystemRoleSeed {
   permissionCodes: string[];
 }
 
-export const permissionSeeds: PermissionSeed[] = [
+type PermissionActionNode = {
+  key: string;
+  title: string;
+  description: string;
+};
+
+type PermissionMenuNode = {
+  key: string;
+  title: string;
+  route: string;
+  description: string;
+  scope: PermissionScope;
+  icon?: string;
+  hidden?: boolean;
+  actions?: PermissionActionNode[];
+  children?: PermissionMenuNode[];
+};
+
+export function menuPermissionCode(...segments: string[]) {
+  return [...segments, 'menu'].join('.');
+}
+
+export function actionPermissionCode(action: string, ...segments: string[]) {
+  return [...segments, action].join('.');
+}
+
+const permissionTreeNodes: PermissionMenuNode[] = [
   {
-    code: 'dashboard.view',
-    module: 'dashboard',
-    action: 'view',
-    name: '查看仪表盘',
-    description: '允许查看系统概览、统计卡片和整体运营数据。'
+    key: 'overview',
+    title: '仪表盘',
+    route: '/dashboard/overview',
+    description: '允许访问系统总览、统计卡片和基础运营看板。',
+    scope: 'global',
+    icon: 'dashboard'
   },
   {
-    code: 'workspaces.view',
-    module: 'workspaces',
-    action: 'view',
-    name: '查看工作区',
-    description: '允许查看工作区列表、状态和成员规模。'
+    key: 'workspaces',
+    title: '工作区',
+    route: '/dashboard/workspaces',
+    description: '允许访问工作区目录和全局工作区入口。',
+    scope: 'global',
+    icon: 'workspace',
+    actions: [
+      {
+        key: 'create',
+        title: '新增工作区',
+        description: '允许新增系统工作区。'
+      },
+      {
+        key: 'update',
+        title: '编辑工作区',
+        description: '允许编辑工作区基础资料。'
+      },
+      {
+        key: 'archive',
+        title: '归档工作区',
+        description: '允许归档工作区并停止在切换器中显示。'
+      }
+    ],
+    children: [
+      {
+        key: 'teams',
+        title: '团队管理',
+        route: '/dashboard/workspaces/teams',
+        description: '允许访问团队管理页。',
+        scope: 'workspace',
+        icon: 'teams',
+        actions: [
+          {
+            key: 'create',
+            title: '新增团队',
+            description: '允许在当前工作区新增团队。'
+          },
+          {
+            key: 'update',
+            title: '编辑团队',
+            description: '允许编辑团队基础资料、负责人和成员。'
+          },
+          {
+            key: 'delete',
+            title: '删除团队',
+            description: '允许删除当前工作区的团队。'
+          },
+          {
+            key: 'import',
+            title: '导入团队成员',
+            description: '允许从 GitHub 搜索成员并加入当前工作区待选列表。'
+          }
+        ]
+      },
+      {
+        key: 'users',
+        title: '用户管理',
+        route: '/dashboard/workspaces/users',
+        description: '允许访问工作区用户管理页。',
+        scope: 'workspace',
+        icon: 'user',
+        actions: [
+          {
+            key: 'create',
+            title: '新增用户',
+            description: '允许录入新的工作区成员。'
+          },
+          {
+            key: 'update',
+            title: '编辑用户',
+            description: '允许修改成员资料、状态和角色。'
+          },
+          {
+            key: 'delete',
+            title: '删除用户',
+            description: '允许删除工作区成员。'
+          }
+        ]
+      },
+      {
+        key: 'roles',
+        title: '角色管理',
+        route: '/dashboard/workspaces/roles',
+        description: '允许访问工作区角色管理页。',
+        scope: 'workspace',
+        icon: 'shield',
+        actions: [
+          {
+            key: 'create',
+            title: '新增角色',
+            description: '允许创建新的工作区角色。'
+          },
+          {
+            key: 'update',
+            title: '编辑角色',
+            description: '允许调整角色名称、描述和权限集合。'
+          },
+          {
+            key: 'delete',
+            title: '删除角色',
+            description: '允许删除非系统内置角色。'
+          }
+        ]
+      },
+      {
+        key: 'permissions',
+        title: '权限管理',
+        route: '/dashboard/workspaces/permissions',
+        description: '允许访问系统权限目录页。',
+        scope: 'workspace',
+        icon: 'key',
+        actions: [
+          {
+            key: 'create',
+            title: '新增权限',
+            description: '允许新增自定义权限项。'
+          },
+          {
+            key: 'update',
+            title: '编辑权限',
+            description: '允许调整权限定义。'
+          },
+          {
+            key: 'delete',
+            title: '删除权限',
+            description: '允许删除非系统权限项。'
+          }
+        ]
+      },
+      {
+        key: 'notifications',
+        title: '站内消息',
+        route: '/dashboard/workspaces/notifications',
+        description: '允许访问站内消息管理页。',
+        scope: 'workspace',
+        icon: 'notification',
+        actions: [
+          {
+            key: 'create',
+            title: '新增通知',
+            description: '允许发布新的工作区通知。'
+          },
+          {
+            key: 'update',
+            title: '编辑通知',
+            description: '允许修改通知内容与已读状态。'
+          },
+          {
+            key: 'delete',
+            title: '删除通知',
+            description: '允许删除工作区通知。'
+          },
+          {
+            key: 'read',
+            title: '标记通知已读',
+            description: '允许切换工作区通知的已读状态。'
+          }
+        ]
+      },
+      {
+        key: 'tickets',
+        title: '工单系统',
+        route: '/dashboard/workspaces/tickets',
+        description: '允许访问工单管理页。',
+        scope: 'workspace',
+        icon: 'ticket',
+        actions: [
+          {
+            key: 'create',
+            title: '新建工单',
+            description: '允许创建新的工单。'
+          },
+          {
+            key: 'update',
+            title: '编辑工单',
+            description: '允许修改工单标题、描述、优先级和状态。'
+          },
+          {
+            key: 'delete',
+            title: '删除工单',
+            description: '允许删除工单及其关联评论。'
+          },
+          {
+            key: 'assign',
+            title: '分配工单',
+            description: '允许修改工单负责人。'
+          },
+          {
+            key: 'comment',
+            title: '评论工单',
+            description: '允许在工单下提交评论。'
+          },
+          {
+            key: 'upload',
+            title: '上传附件',
+            description: '允许为工单和评论上传附件。'
+          }
+        ]
+      },
+      {
+        key: 'kanban',
+        title: '看板',
+        route: '/dashboard/workspaces/kanban',
+        description: '允许访问工单看板页。',
+        scope: 'workspace',
+        icon: 'kanban',
+        actions: [
+          {
+            key: 'update',
+            title: '更新看板状态',
+            description: '允许通过拖拽更新工单状态。'
+          }
+        ]
+      }
+    ]
   },
   {
-    code: 'workspaces.manage',
-    module: 'workspaces',
-    action: 'manage',
-    name: '维护工作区',
-    description: '允许创建、编辑和归档工作区。'
+    key: 'ops',
+    title: '运维区',
+    route: '/dashboard/workspaces/ops',
+    description: '允许展开运维区功能目录。',
+    scope: 'workspace',
+    icon: 'settings',
+    children: [
+      {
+        key: 'system',
+        title: '系统管理',
+        route: '/dashboard/workspaces/ops/system',
+        description: '允许访问系统管理占位页。',
+        scope: 'workspace'
+      },
+      {
+        key: 'config',
+        title: '配置管理',
+        route: '/dashboard/workspaces/ops/config',
+        description: '允许访问配置管理占位页。',
+        scope: 'workspace'
+      },
+      {
+        key: 'information',
+        title: '信息管理',
+        route: '/dashboard/workspaces/ops/information',
+        description: '允许访问信息管理占位页。',
+        scope: 'workspace'
+      },
+      {
+        key: 'data',
+        title: '数据管理',
+        route: '/dashboard/workspaces/ops/data',
+        description: '允许访问数据管理占位页。',
+        scope: 'workspace'
+      }
+    ]
   },
   {
-    code: 'workspaces.switch',
-    module: 'workspaces',
-    action: 'switch',
-    name: '切换工作区',
-    description: '允许切换当前活跃工作区。'
+    key: 'dev',
+    title: '开发区',
+    route: '/dashboard/workspaces/dev',
+    description: '允许展开开发区功能目录。',
+    scope: 'workspace',
+    icon: 'laptop',
+    children: [
+      {
+        key: 'accounts',
+        title: '账号管理',
+        route: '/dashboard/workspaces/dev/accounts',
+        description: '允许访问账号管理占位页。',
+        scope: 'workspace'
+      },
+      {
+        key: 'projects',
+        title: '项目管理',
+        route: '/dashboard/workspaces/dev/projects',
+        description: '允许访问项目管理占位页。',
+        scope: 'workspace'
+      },
+      {
+        key: 'resources',
+        title: '资源管理',
+        route: '/dashboard/workspaces/dev/resources',
+        description: '允许访问资源管理占位页。',
+        scope: 'workspace'
+      }
+    ]
   },
   {
-    code: 'teams.view',
-    module: 'teams',
-    action: 'view',
-    name: '查看团队',
-    description: '允许查看当前工作区下的团队列表和负责人信息。'
+    key: 'admin',
+    title: '行政区',
+    route: '/dashboard/workspaces/admin',
+    description: '允许展开行政区功能目录。',
+    scope: 'workspace',
+    icon: 'page',
+    children: [
+      {
+        key: 'hr',
+        title: '人力资源',
+        route: '/dashboard/workspaces/admin/hr',
+        description: '允许访问人力资源占位页。',
+        scope: 'workspace'
+      },
+      {
+        key: 'policies',
+        title: '规章制度',
+        route: '/dashboard/workspaces/admin/policies',
+        description: '允许访问规章制度占位页。',
+        scope: 'workspace'
+      },
+      {
+        key: 'governance',
+        title: '司政中心',
+        route: '/dashboard/workspaces/admin/governance',
+        description: '允许访问司政中心占位页。',
+        scope: 'workspace'
+      }
+    ]
   },
   {
-    code: 'teams.manage',
-    module: 'teams',
-    action: 'manage',
-    name: '维护团队',
-    description: '允许创建、编辑和删除团队及其成员配置。'
-  },
-  {
-    code: 'users.view',
-    module: 'users',
-    action: 'view',
-    name: '查看用户',
-    description: '允许查看工作区成员、系统角色和登录状态。'
-  },
-  {
-    code: 'users.manage',
-    module: 'users',
-    action: 'manage',
-    name: '维护用户',
-    description: '允许新增、编辑和删除工作区成员。'
-  },
-  {
-    code: 'users.import',
-    module: 'users',
-    action: 'import',
-    name: '导入 GitHub 用户',
-    description: '允许通过 GitHub 用户名搜索并导入成员。'
-  },
-  {
-    code: 'roles.view',
-    module: 'roles',
-    action: 'view',
-    name: '查看角色',
-    description: '允许查看当前工作区下的角色和权限绑定关系。'
-  },
-  {
-    code: 'roles.manage',
-    module: 'roles',
-    action: 'manage',
-    name: '维护角色',
-    description: '允许创建、编辑和删除角色。'
-  },
-  {
-    code: 'permissions.view',
-    module: 'permissions',
-    action: 'view',
-    name: '查看权限',
-    description: '允许查看系统内维护的权限编码与模块划分。'
-  },
-  {
-    code: 'permissions.manage',
-    module: 'permissions',
-    action: 'manage',
-    name: '维护权限',
-    description: '允许创建、编辑和删除权限项。'
-  },
-  {
-    code: 'notifications.view',
-    module: 'notifications',
-    action: 'view',
-    name: '查看消息',
-    description: '允许查看站内消息和运维提醒。'
-  },
-  {
-    code: 'notifications.manage',
-    module: 'notifications',
-    action: 'manage',
-    name: '维护消息',
-    description: '允许新增、编辑和删除站内消息。'
-  },
-  {
-    code: 'notifications.publish',
-    module: 'notifications',
-    action: 'publish',
-    name: '发布消息',
-    description: '允许向工作区成员发布公告和提醒。'
-  },
-  {
-    code: 'tickets.view',
-    module: 'tickets',
-    action: 'view',
-    name: '查看工单',
-    description: '允许查看工单列表、状态和协作详情。'
-  },
-  {
-    code: 'tickets.manage',
-    module: 'tickets',
-    action: 'manage',
-    name: '维护工单',
-    description: '允许创建、编辑和删除工单。'
-  },
-  {
-    code: 'tickets.assign',
-    module: 'tickets',
-    action: 'assign',
-    name: '分配工单',
-    description: '允许修改工单负责人和状态流转。'
-  },
-  {
-    code: 'tickets.comment',
-    module: 'tickets',
-    action: 'comment',
-    name: '评论工单',
-    description: '允许为工单追加评论和协作记录。'
-  },
-  {
-    code: 'kanban.view',
-    module: 'kanban',
-    action: 'view',
-    name: '查看看板',
-    description: '允许查看基于工单的看板视图。'
-  },
-  {
-    code: 'kanban.manage',
-    module: 'kanban',
-    action: 'manage',
-    name: '维护看板',
-    description: '允许拖拽更新看板状态并参与流程推进。'
-  },
-  {
-    code: 'audit_logs.view',
-    module: 'audit_logs',
-    action: 'view',
-    name: '查看审计日志',
-    description: '允许查看管理端关键操作的审计记录。'
-  },
-  {
-    code: 'files.view',
-    module: 'files',
-    action: 'view',
-    name: '查看文件',
-    description: '允许查看系统内的文件资产记录。'
-  },
-  {
-    code: 'files.upload',
-    module: 'files',
-    action: 'upload',
-    name: '上传文件',
-    description: '允许上传附件并登记到文件资产表。'
-  },
-  {
-    code: 'profile.view',
-    module: 'profile',
-    action: 'view',
-    name: '查看个人资料',
-    description: '允许查看个人资料页面。'
-  },
-  {
-    code: 'profile.update',
-    module: 'profile',
-    action: 'update',
-    name: '更新个人资料',
-    description: '允许更新个人资料信息。'
+    key: 'profile',
+    title: '账户设置',
+    route: '/dashboard/profile',
+    description: '允许访问个人资料与账户设置页。',
+    scope: 'global',
+    hidden: true,
+    actions: [
+      {
+        key: 'update',
+        title: '编辑个人资料',
+        description: '允许更新个人资料。'
+      }
+    ]
   }
 ];
+
+type NavigationNode = {
+  title: string;
+  url: string;
+  icon?: string;
+  hidden?: boolean;
+  permissionCode: string;
+  children: NavigationNode[];
+};
+
+function flattenPermissionTree(
+  nodes: PermissionMenuNode[],
+  parentSegments: string[] = ['dashboard'],
+  parentCode: string | null = null,
+  parentTitles: string[] = [],
+  orderPrefix = 0
+): { permissions: PermissionSeed[]; navigation: NavigationNode[] } {
+  const permissions: PermissionSeed[] = [];
+  const navigation: NavigationNode[] = [];
+
+  nodes.forEach((node, index) => {
+    const segments = [...parentSegments, node.key];
+    const titles = [...parentTitles, node.title];
+    const menuCode = menuPermissionCode(...segments);
+    const module = segments.join('.');
+    const menuSortOrder = orderPrefix + (index + 1) * 100;
+
+    permissions.push({
+      code: menuCode,
+      module,
+      action: 'menu',
+      name: `${node.title}菜单`,
+      description: node.description,
+      scope: node.scope,
+      permissionType: 'menu',
+      parentCode,
+      route: node.route,
+      sortOrder: menuSortOrder,
+      isSystem: true,
+      pathLabel: titles.join(' / ')
+    });
+
+    const actionPermissions = (node.actions ?? []).map(
+      (action, actionIndex) => ({
+        code: actionPermissionCode(action.key, ...segments),
+        module,
+        action: action.key,
+        name: action.title,
+        description: action.description,
+        scope: node.scope,
+        permissionType: 'action' as const,
+        parentCode: menuCode,
+        route: node.route,
+        sortOrder: menuSortOrder + actionIndex + 1,
+        isSystem: true,
+        pathLabel: [...titles, action.title].join(' / ')
+      })
+    );
+
+    permissions.push(...actionPermissions);
+
+    const flattenedChildren = flattenPermissionTree(
+      node.children ?? [],
+      segments,
+      menuCode,
+      titles,
+      menuSortOrder
+    );
+
+    permissions.push(...flattenedChildren.permissions);
+
+    navigation.push({
+      title: node.title,
+      url: node.route,
+      icon: node.icon,
+      hidden: node.hidden,
+      permissionCode: menuCode,
+      children: flattenedChildren.navigation
+    });
+  });
+
+  return { permissions, navigation };
+}
+
+const flattenedPermissionTree = flattenPermissionTree(permissionTreeNodes);
+
+export const permissionSeeds: PermissionSeed[] =
+  flattenedPermissionTree.permissions;
+
+export const navigationPermissionTree = flattenedPermissionTree.navigation;
+
+export const permissionSeedByCode = new Map(
+  permissionSeeds.map((permission) => [permission.code, permission] as const)
+);
 
 export const allPermissionCodes = permissionSeeds.map(
   (permission) => permission.code
 );
 
-export const memberPermissionCodes = [
-  'dashboard.view',
-  'workspaces.view',
-  'workspaces.switch',
-  'teams.view',
-  'users.view',
-  'roles.view',
-  'permissions.view',
-  'notifications.view',
-  'tickets.view',
-  'tickets.comment',
-  'kanban.view',
-  'files.view',
-  'profile.view',
-  'profile.update'
+export const allWorkspacePermissionCodes = permissionSeeds
+  .filter((permission) => permission.scope === 'workspace')
+  .map((permission) => permission.code);
+
+export const allGlobalPermissionCodes = permissionSeeds
+  .filter((permission) => permission.scope === 'global')
+  .map((permission) => permission.code);
+
+const memberWorkspacePermissionCodes = [
+  menuPermissionCode('dashboard', 'workspaces', 'teams'),
+  menuPermissionCode('dashboard', 'workspaces', 'users'),
+  menuPermissionCode('dashboard', 'workspaces', 'roles'),
+  menuPermissionCode('dashboard', 'workspaces', 'permissions'),
+  menuPermissionCode('dashboard', 'workspaces', 'notifications'),
+  actionPermissionCode('read', 'dashboard', 'workspaces', 'notifications'),
+  menuPermissionCode('dashboard', 'workspaces', 'tickets'),
+  actionPermissionCode('comment', 'dashboard', 'workspaces', 'tickets'),
+  menuPermissionCode('dashboard', 'workspaces', 'kanban')
 ];
 
-export const adminPermissionCodes = allPermissionCodes.filter(
-  (code) => code !== 'workspaces.manage'
-);
+const adminWorkspacePermissionCodes = allWorkspacePermissionCodes.slice();
+
+const memberGlobalPermissionCodes = [
+  menuPermissionCode('dashboard', 'overview'),
+  menuPermissionCode('dashboard', 'workspaces'),
+  menuPermissionCode('dashboard', 'profile'),
+  actionPermissionCode('update', 'dashboard', 'profile')
+];
+
+const adminGlobalPermissionCodes = memberGlobalPermissionCodes.slice();
+
+const systemRoleGlobalPermissionCodes: Record<SystemRoleKey, string[]> = {
+  super_admin: ['*'],
+  admin: adminGlobalPermissionCodes,
+  member: memberGlobalPermissionCodes
+};
 
 export const systemRoleSeeds: SystemRoleSeed[] = [
   {
     key: 'super_admin',
     name: '超级管理员',
     description: '系统内置角色，拥有当前工作区下全部页面与操作能力。',
-    permissionCodes: allPermissionCodes
+    permissionCodes: allWorkspacePermissionCodes
   },
   {
     key: 'admin',
     name: '管理员',
     description: '系统内置角色，负责当前工作区的日常管理与协作配置。',
-    permissionCodes: adminPermissionCodes
+    permissionCodes: adminWorkspacePermissionCodes
   },
   {
     key: 'member',
     name: '成员',
-    description: '系统内置角色，默认提供只读浏览与基础协作能力。',
-    permissionCodes: memberPermissionCodes
+    description: '系统内置角色，默认提供浏览和基础协作能力。',
+    permissionCodes: memberWorkspacePermissionCodes
   }
 ];
 
@@ -259,4 +556,20 @@ export function getSystemRolePermissionCodes(role: SystemRoleKey) {
   return (
     systemRoleSeeds.find((item) => item.key === role)?.permissionCodes ?? []
   );
+}
+
+export function getSystemRoleGlobalPermissionCodes(role: SystemRoleKey) {
+  return systemRoleGlobalPermissionCodes[role] ?? [];
+}
+
+export function getPermissionSeed(code: string) {
+  return permissionSeedByCode.get(code) ?? null;
+}
+
+export function getPermissionScope(code: string): PermissionScope | null {
+  return getPermissionSeed(code)?.scope ?? null;
+}
+
+export function isWorkspaceScopedPermission(code: string) {
+  return getPermissionScope(code) === 'workspace';
 }

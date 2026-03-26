@@ -59,6 +59,12 @@ interface TeamsManagementClientProps {
   initialPagination: PaginationMeta;
   workspaceId?: string;
   memberOptions: OptionItem[];
+  access: {
+    canCreate: boolean;
+    canUpdate: boolean;
+    canDelete: boolean;
+    canImportMembers: boolean;
+  };
 }
 
 type TeamFormState = {
@@ -119,7 +125,8 @@ export function TeamsManagementClient({
   initialTeams,
   initialPagination,
   workspaceId,
-  memberOptions
+  memberOptions,
+  access
 }: TeamsManagementClientProps) {
   const [teams, setTeams] = useState(initialTeams);
   const [pagination, setPagination] = useState(initialPagination);
@@ -322,6 +329,8 @@ export function TeamsManagementClient({
     );
   }
 
+  const canManageAny = access.canUpdate || access.canDelete;
+
   return (
     <>
       <Card>
@@ -342,7 +351,9 @@ export function TeamsManagementClient({
               placeholder='搜索团队名 / 标识 / 负责人'
               className='md:w-80'
             />
-            <Button onClick={openCreateDialog}>新增团队</Button>
+            {access.canCreate ? (
+              <Button onClick={openCreateDialog}>新增团队</Button>
+            ) : null}
           </div>
         </CardHeader>
         <CardContent>
@@ -354,7 +365,7 @@ export function TeamsManagementClient({
                 <TableHead>负责人</TableHead>
                 <TableHead>成员数</TableHead>
                 <TableHead>说明</TableHead>
-                <TableHead>操作</TableHead>
+                {canManageAny ? <TableHead>操作</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -369,33 +380,39 @@ export function TeamsManagementClient({
                   <TableCell className='max-w-md whitespace-normal'>
                     {team.description}
                   </TableCell>
-                  <TableCell>
-                    <div className='flex gap-2'>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => openEditDialog(team)}
-                      >
-                        编辑
-                      </Button>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => {
-                          setDeletingTeam(team);
-                          setDeleteOpen(true);
-                        }}
-                      >
-                        删除
-                      </Button>
-                    </div>
-                  </TableCell>
+                  {canManageAny ? (
+                    <TableCell>
+                      <div className='flex gap-2'>
+                        {access.canUpdate ? (
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            onClick={() => openEditDialog(team)}
+                          >
+                            编辑
+                          </Button>
+                        ) : null}
+                        {access.canDelete ? (
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            onClick={() => {
+                              setDeletingTeam(team);
+                              setDeleteOpen(true);
+                            }}
+                          >
+                            删除
+                          </Button>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
               {!teams.length && (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={canManageAny ? 6 : 5}
                     className='text-muted-foreground py-10 text-center'
                   >
                     当前没有匹配的团队记录。
@@ -502,16 +519,18 @@ export function TeamsManagementClient({
             <div className='grid gap-2'>
               <div className='flex items-center justify-between gap-3'>
                 <label className='text-sm font-medium'>团队成员</label>
-                <Button
-                  type='button'
-                  variant='outline'
-                  size='icon'
-                  onClick={() => setGithubPickerOpen(true)}
-                  aria-label='从 GitHub 添加团队成员'
-                  title='从 GitHub 添加团队成员'
-                >
-                  <Plus />
-                </Button>
+                {access.canImportMembers ? (
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='icon'
+                    onClick={() => setGithubPickerOpen(true)}
+                    aria-label='从 GitHub 添加团队成员'
+                    title='从 GitHub 添加团队成员'
+                  >
+                    <Plus />
+                  </Button>
+                ) : null}
               </div>
               <OptionCheckboxGroup
                 options={availableMemberOptions}
@@ -542,7 +561,7 @@ export function TeamsManagementClient({
         </DialogContent>
       </Dialog>
 
-      {workspaceId ? (
+      {workspaceId && access.canImportMembers ? (
         <TeamGithubMemberPickerDialog
           open={githubPickerOpen}
           onOpenChange={setGithubPickerOpen}

@@ -35,7 +35,8 @@ export const userPayloadSchema = z.object({
     .transform((value) => (value ? value.toLowerCase() : null)),
   systemRole: z.enum(['super_admin', 'admin', 'member']),
   status: z.enum(['active', 'invited', 'disabled']),
-  emailLoginEnabled: z.boolean().default(true)
+  emailLoginEnabled: z.boolean().default(true),
+  roleIds: z.array(z.string().min(1)).default([])
 });
 
 export const rolePayloadSchema = z.object({

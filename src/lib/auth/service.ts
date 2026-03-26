@@ -1,6 +1,6 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/lib/db';
-import { getSystemRolePermissionCodes } from '@/lib/platform/rbac';
+import { getSystemRoleGlobalPermissionCodes } from '@/lib/platform/rbac';
 
 export interface AuthUserSnapshot {
   id: string;
@@ -10,16 +10,17 @@ export interface AuthUserSnapshot {
   githubUsername: string;
   systemRole: 'super_admin' | 'admin' | 'member';
   permissions: string[];
+  workspacePermissions: Record<string, string[]>;
   workspaceIds: string[];
   defaultWorkspaceId: string | null;
 }
 
-function wildcardPermissions(systemRole: AuthUserSnapshot['systemRole']) {
+function globalPermissions(systemRole: AuthUserSnapshot['systemRole']) {
   if (systemRole === 'super_admin') {
     return ['*'];
   }
 
-  return getSystemRolePermissionCodes(systemRole);
+  return getSystemRoleGlobalPermissionCodes(systemRole);
 }
 
 export async function findUserByGithubUsername(githubUsername: string) {
@@ -99,6 +100,72 @@ export async function buildAuthUserSnapshot(
     .where(eq(schema.workspaceMembers.userId, user.id));
 
   const workspaceIds = memberships.map((membership) => membership.workspaceId);
+  const defaultWorkspaceId = workspaceIds[0] ?? null;
+
+  if (user.systemRole === 'super_admin') {
+    return {
+      id: user.id,
+      name: user.displayName || user.githubUsername,
+      email: user.email ?? null,
+      image: user.avatarUrl ?? null,
+      githubUsername: user.githubUsername,
+      systemRole: user.systemRole,
+      permissions: ['*'],
+      workspacePermissions: Object.fromEntries(
+        workspaceIds.map((workspaceId) => [workspaceId, ['*']])
+      ),
+      workspaceIds,
+      defaultWorkspaceId
+    };
+  }
+
+  const workspacePermissionRows = workspaceIds.length
+    ? await db
+        .select({
+          workspaceId: schema.workspaceMemberRoles.workspaceId,
+          code: schema.permissions.code
+        })
+        .from(schema.workspaceMemberRoles)
+        .innerJoin(
+          schema.rolePermissions,
+          eq(schema.workspaceMemberRoles.roleId, schema.rolePermissions.roleId)
+        )
+        .innerJoin(
+          schema.permissions,
+          eq(schema.rolePermissions.permissionId, schema.permissions.id)
+        )
+        .where(
+          and(
+            eq(schema.workspaceMemberRoles.userId, user.id),
+            inArray(schema.workspaceMemberRoles.workspaceId, workspaceIds),
+            eq(schema.permissions.scope, 'workspace')
+          )
+        )
+    : [];
+
+  const workspacePermissionMap = new Map<string, Set<string>>();
+  workspaceIds.forEach((workspaceId) => {
+    workspacePermissionMap.set(workspaceId, new Set<string>());
+  });
+
+  workspacePermissionRows.forEach((row) => {
+    const current = workspacePermissionMap.get(row.workspaceId);
+    if (current) {
+      current.add(row.code);
+    }
+  });
+
+  const workspacePermissions = Object.fromEntries(
+    Array.from(workspacePermissionMap.entries()).map(
+      ([workspaceId, permissionSet]) => [workspaceId, Array.from(permissionSet)]
+    )
+  );
+  const permissions = Array.from(
+    new Set([
+      ...globalPermissions(user.systemRole),
+      ...Object.values(workspacePermissions).flat()
+    ])
+  );
 
   return {
     id: user.id,
@@ -107,8 +174,9 @@ export async function buildAuthUserSnapshot(
     image: user.avatarUrl ?? null,
     githubUsername: user.githubUsername,
     systemRole: user.systemRole,
-    permissions: wildcardPermissions(user.systemRole),
+    permissions,
+    workspacePermissions,
     workspaceIds,
-    defaultWorkspaceId: workspaceIds[0] ?? null
+    defaultWorkspaceId
   };
 }

@@ -51,7 +51,11 @@ interface WorkspacesManagementClientProps {
   initialWorkspaces: WorkspaceSummary[];
   initialPagination: PaginationMeta;
   initialMetrics: WorkspaceMetrics;
-  canManage: boolean;
+  access: {
+    canCreate: boolean;
+    canUpdate: boolean;
+    canArchive: boolean;
+  };
 }
 
 type WorkspaceMetrics = {
@@ -82,7 +86,7 @@ export function WorkspacesManagementClient({
   initialWorkspaces,
   initialPagination,
   initialMetrics,
-  canManage
+  access
 }: WorkspacesManagementClientProps) {
   const router = useRouter();
   const [workspaces, setWorkspaces] = useState(initialWorkspaces);
@@ -190,21 +194,26 @@ export function WorkspacesManagementClient({
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!canManage) {
-      toast.error('当前仅超级管理员可以维护工作区。');
-      return;
-    }
-
     setSubmitPending(true);
 
     try {
       if (editingWorkspace) {
+        if (!access.canUpdate) {
+          toast.error('当前没有编辑工作区的权限。');
+          return;
+        }
+
         await requestJson(`/api/admin/workspaces/${editingWorkspace.id}`, {
           method: 'PUT',
           body: JSON.stringify(form)
         });
         toast.success('工作区已更新。');
       } else {
+        if (!access.canCreate) {
+          toast.error('当前没有新增工作区的权限。');
+          return;
+        }
+
         await requestJson('/api/admin/workspaces', {
           method: 'POST',
           body: JSON.stringify(form)
@@ -225,7 +234,12 @@ export function WorkspacesManagementClient({
   }
 
   async function handleArchive() {
-    if (!canManage || !archivingWorkspace) {
+    if (!archivingWorkspace) {
+      return;
+    }
+
+    if (!access.canArchive) {
+      toast.error('当前没有归档工作区的权限。');
       return;
     }
 
@@ -247,7 +261,9 @@ export function WorkspacesManagementClient({
     }
   }
 
-  const tableColumns = canManage ? 7 : 6;
+  const canManageAny =
+    access.canCreate || access.canUpdate || access.canArchive;
+  const tableColumns = canManageAny ? 7 : 6;
 
   return (
     <div className='space-y-6'>
@@ -277,9 +293,9 @@ export function WorkspacesManagementClient({
           <div>
             <CardTitle>工作区列表</CardTitle>
             <CardDescription>
-              {canManage
-                ? '支持新增、编辑和归档工作区。归档后的工作区不会出现在工作区切换器中。'
-                : '当前为只读模式。只有超级管理员可以新增、编辑和归档工作区。'}
+              {canManageAny
+                ? '权限已经按新增、编辑、归档拆开控制，归档后的工作区不会出现在工作区切换器中。'
+                : '当前为只读模式。'}
             </CardDescription>
           </div>
           <div className='flex w-full flex-col gap-3 md:w-auto md:flex-row'>
@@ -292,7 +308,7 @@ export function WorkspacesManagementClient({
               placeholder='搜索工作区名称 / 标识 / 说明'
               className='md:w-80'
             />
-            {canManage ? (
+            {access.canCreate ? (
               <Button onClick={openCreateDialog}>新增工作区</Button>
             ) : null}
           </div>
@@ -307,7 +323,7 @@ export function WorkspacesManagementClient({
                 <TableHead>团队数</TableHead>
                 <TableHead>成员数</TableHead>
                 <TableHead>说明</TableHead>
-                {canManage ? <TableHead>操作</TableHead> : null}
+                {canManageAny ? <TableHead>操作</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -332,34 +348,38 @@ export function WorkspacesManagementClient({
                   <TableCell className='max-w-md whitespace-normal'>
                     {workspace.description}
                   </TableCell>
-                  {canManage ? (
+                  {canManageAny ? (
                     <TableCell>
                       <div className='flex gap-2'>
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          onClick={() => openEditDialog(workspace)}
-                        >
-                          编辑
-                        </Button>
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          disabled={
-                            workspace.status === 'archived' ||
-                            workspace.isDefault
-                          }
-                          onClick={() => {
-                            setArchivingWorkspace(workspace);
-                            setArchiveOpen(true);
-                          }}
-                        >
-                          {workspace.isDefault
-                            ? '默认工作区'
-                            : workspace.status === 'archived'
-                              ? '已归档'
-                              : '归档'}
-                        </Button>
+                        {access.canUpdate ? (
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            onClick={() => openEditDialog(workspace)}
+                          >
+                            编辑
+                          </Button>
+                        ) : null}
+                        {access.canArchive ? (
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            disabled={
+                              workspace.status === 'archived' ||
+                              workspace.isDefault
+                            }
+                            onClick={() => {
+                              setArchivingWorkspace(workspace);
+                              setArchiveOpen(true);
+                            }}
+                          >
+                            {workspace.isDefault
+                              ? '默认工作区'
+                              : workspace.status === 'archived'
+                                ? '已归档'
+                                : '归档'}
+                          </Button>
+                        ) : null}
                       </div>
                     </TableCell>
                   ) : null}
@@ -387,7 +407,7 @@ export function WorkspacesManagementClient({
         </CardContent>
       </Card>
 
-      {canManage ? (
+      {access.canCreate || access.canUpdate ? (
         <Dialog
           open={dialogOpen}
           onOpenChange={(open) => {
@@ -490,7 +510,7 @@ export function WorkspacesManagementClient({
         </Dialog>
       ) : null}
 
-      {canManage ? (
+      {access.canArchive ? (
         <ConfirmActionDialog
           open={archiveOpen}
           onOpenChange={setArchiveOpen}

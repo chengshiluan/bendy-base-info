@@ -37,9 +37,14 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { useDebounce } from '@/hooks/use-debounce';
-import type { PaginationMeta, UserSummary } from '@/lib/platform/types';
+import type {
+  OptionItem,
+  PaginationMeta,
+  UserSummary
+} from '@/lib/platform/types';
 import { ConfirmActionDialog } from './confirm-action-dialog';
 import { ManagementPagination } from './management-pagination';
+import { OptionCheckboxGroup } from './option-checkbox-group';
 import {
   buildPathWithQuery,
   getErrorMessage,
@@ -51,6 +56,12 @@ interface UsersManagementClientProps {
   initialUsers: UserSummary[];
   initialPagination: PaginationMeta;
   workspaceId?: string;
+  roleOptions: OptionItem[];
+  access: {
+    canCreate: boolean;
+    canUpdate: boolean;
+    canDelete: boolean;
+  };
 }
 
 type UserFormState = {
@@ -60,6 +71,7 @@ type UserFormState = {
   systemRole: 'super_admin' | 'admin' | 'member';
   status: 'active' | 'invited' | 'disabled';
   emailLoginEnabled: boolean;
+  roleIds: string[];
 };
 
 function createDefaultForm(): UserFormState {
@@ -69,14 +81,17 @@ function createDefaultForm(): UserFormState {
     email: '',
     systemRole: 'member',
     status: 'active',
-    emailLoginEnabled: true
+    emailLoginEnabled: true,
+    roleIds: []
   };
 }
 
 export function UsersManagementClient({
   initialUsers,
   initialPagination,
-  workspaceId
+  workspaceId,
+  roleOptions,
+  access
 }: UsersManagementClientProps) {
   const [users, setUsers] = useState(initialUsers);
   const [pagination, setPagination] = useState(initialPagination);
@@ -177,7 +192,8 @@ export function UsersManagementClient({
       email: user.email ?? '',
       systemRole: user.systemRole,
       status: user.status,
-      emailLoginEnabled: Boolean(user.emailLoginEnabled)
+      emailLoginEnabled: Boolean(user.emailLoginEnabled),
+      roleIds: user.roleIds ?? []
     });
     setDialogOpen(true);
   }
@@ -261,6 +277,8 @@ export function UsersManagementClient({
     );
   }
 
+  const canManageAny = access.canUpdate || access.canDelete;
+
   return (
     <>
       <Card>
@@ -281,7 +299,9 @@ export function UsersManagementClient({
               placeholder='搜索 GitHub 用户名 / 显示名 / 邮箱'
               className='md:w-80'
             />
-            <Button onClick={openCreateDialog}>新增用户</Button>
+            {access.canCreate ? (
+              <Button onClick={openCreateDialog}>新增用户</Button>
+            ) : null}
           </div>
         </CardHeader>
         <CardContent>
@@ -292,9 +312,10 @@ export function UsersManagementClient({
                 <TableHead>显示名称</TableHead>
                 <TableHead>邮箱</TableHead>
                 <TableHead>系统角色</TableHead>
+                <TableHead>工作区角色</TableHead>
                 <TableHead>状态</TableHead>
                 <TableHead>邮箱登录</TableHead>
-                <TableHead>操作</TableHead>
+                {canManageAny ? <TableHead>操作</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -310,6 +331,9 @@ export function UsersManagementClient({
                       {getSystemRoleLabel(user.systemRole)}
                     </Badge>
                   </TableCell>
+                  <TableCell className='max-w-sm whitespace-normal'>
+                    {user.roleNames?.length ? user.roleNames.join(' / ') : '-'}
+                  </TableCell>
                   <TableCell>
                     <Badge variant='outline'>
                       {getUserStatusLabel(user.status)}
@@ -322,33 +346,39 @@ export function UsersManagementClient({
                       {user.emailLoginEnabled ? '已开启' : '已关闭'}
                     </Badge>
                   </TableCell>
-                  <TableCell>
-                    <div className='flex gap-2'>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => openEditDialog(user)}
-                      >
-                        编辑
-                      </Button>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => {
-                          setDeletingUser(user);
-                          setDeleteOpen(true);
-                        }}
-                      >
-                        删除
-                      </Button>
-                    </div>
-                  </TableCell>
+                  {canManageAny ? (
+                    <TableCell>
+                      <div className='flex gap-2'>
+                        {access.canUpdate ? (
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            onClick={() => openEditDialog(user)}
+                          >
+                            编辑
+                          </Button>
+                        ) : null}
+                        {access.canDelete ? (
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            onClick={() => {
+                              setDeletingUser(user);
+                              setDeleteOpen(true);
+                            }}
+                          >
+                            删除
+                          </Button>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
               {!users.length && (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={canManageAny ? 8 : 7}
                     className='text-muted-foreground py-10 text-center'
                   >
                     当前没有匹配的用户记录。
@@ -466,6 +496,17 @@ export function UsersManagementClient({
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className='grid gap-2'>
+              <label className='text-sm font-medium'>工作区角色</label>
+              <OptionCheckboxGroup
+                options={roleOptions}
+                value={form.roleIds}
+                onChange={(roleIds) =>
+                  setForm((current) => ({ ...current, roleIds }))
+                }
+                emptyLabel='当前工作区还没有可分配的角色。'
+              />
             </div>
             <div className='flex items-center justify-between rounded-md border p-3'>
               <div>

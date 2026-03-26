@@ -1,13 +1,17 @@
 import PageContainer from '@/components/layout/page-container';
 import { WorkspacesManagementClient } from '@/features/management/components/workspaces-management-client';
-import { requireSession } from '@/lib/auth/session';
+import { hasPermission } from '@/lib/auth/permission';
+import { requirePagePermission } from '@/lib/auth/session';
+import { actionPermissionCode, menuPermissionCode } from '@/lib/platform/rbac';
 import {
   getWorkspaceSummaryMetrics,
   listWorkspacesPage
 } from '@/lib/platform/service';
 
 export default async function WorkspacesPage() {
-  const session = await requireSession();
+  const session = await requirePagePermission(
+    menuPermissionCode('dashboard', 'workspaces')
+  );
   const [{ items, pagination }, summary] = await Promise.all([
     listWorkspacesPage({
       userId: session.user.id,
@@ -25,7 +29,20 @@ export default async function WorkspacesPage() {
         initialWorkspaces={items}
         initialPagination={pagination}
         initialMetrics={summary}
-        canManage={session.user.systemRole === 'super_admin'}
+        access={{
+          canCreate: hasPermission(
+            session.user,
+            actionPermissionCode('create', 'dashboard', 'workspaces')
+          ),
+          canUpdate: hasPermission(
+            session.user,
+            actionPermissionCode('update', 'dashboard', 'workspaces')
+          ),
+          canArchive: hasPermission(
+            session.user,
+            actionPermissionCode('archive', 'dashboard', 'workspaces')
+          )
+        }}
       />
     </PageContainer>
   );

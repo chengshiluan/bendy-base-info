@@ -29,6 +29,16 @@ export const workspaceStatusEnum = pgEnum('workspace_status', [
   'archived'
 ]);
 
+export const permissionScopeEnum = pgEnum('permission_scope', [
+  'global',
+  'workspace'
+]);
+
+export const permissionTypeEnum = pgEnum('permission_type', [
+  'menu',
+  'action'
+]);
+
 export const ticketStatusEnum = pgEnum('ticket_status', [
   'open',
   'in_progress',
@@ -178,6 +188,14 @@ export const permissions = pgTable(
     name: varchar('name', { length: 120 }).notNull(),
     module: varchar('module', { length: 60 }).notNull(),
     action: varchar('action', { length: 60 }).notNull(),
+    scope: permissionScopeEnum('scope').default('workspace').notNull(),
+    permissionType: permissionTypeEnum('permission_type')
+      .default('action')
+      .notNull(),
+    parentCode: varchar('parent_code', { length: 120 }),
+    route: varchar('route', { length: 255 }),
+    sortOrder: integer('sort_order').default(0).notNull(),
+    isSystem: boolean('is_system').default(false).notNull(),
     description: text('description'),
     ...timestamps
   },
@@ -198,6 +216,27 @@ export const rolePermissions = pgTable(
   },
   (table) => ({
     pk: primaryKey({ columns: [table.roleId, table.permissionId] })
+  })
+);
+
+export const workspaceMemberRoles = pgTable(
+  'workspace_member_roles',
+  {
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    roleId: uuid('role_id')
+      .notNull()
+      .references(() => roles.id, { onDelete: 'cascade' }),
+    ...timestamps
+  },
+  (table) => ({
+    pk: primaryKey({
+      columns: [table.workspaceId, table.userId, table.roleId]
+    })
   })
 );
 
@@ -320,6 +359,7 @@ export const schema = {
   users,
   workspaces,
   workspaceMembers,
+  workspaceMemberRoles,
   teams,
   teamMembers,
   roles,

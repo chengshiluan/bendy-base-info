@@ -69,7 +69,9 @@ export const demoUsers: UserSummary[] = [
     systemRole: 'super_admin',
     status: 'active',
     emailLoginEnabled: true,
-    workspaceIds: ['ws_core', 'ws_delivery']
+    workspaceIds: ['ws_core', 'ws_delivery'],
+    roleIds: ['role_super_admin'],
+    roleNames: ['超级管理员']
   },
   {
     id: 'user_lin',
@@ -79,7 +81,9 @@ export const demoUsers: UserSummary[] = [
     systemRole: 'admin',
     status: 'active',
     emailLoginEnabled: true,
-    workspaceIds: ['ws_core', 'ws_delivery']
+    workspaceIds: ['ws_core', 'ws_delivery'],
+    roleIds: ['role_admin'],
+    roleNames: ['管理员']
   },
   {
     id: 'user_zhou',
@@ -89,7 +93,9 @@ export const demoUsers: UserSummary[] = [
     systemRole: 'member',
     status: 'invited',
     emailLoginEnabled: false,
-    workspaceIds: ['ws_delivery']
+    workspaceIds: ['ws_delivery'],
+    roleIds: ['role_member'],
+    roleNames: ['成员']
   }
 ];
 
@@ -111,6 +117,13 @@ export const demoPermissions: PermissionSummary[] = permissionSeeds.map(
     action: permission.action,
     code: permission.code,
     name: permission.name,
+    scope: permission.scope,
+    permissionType: permission.permissionType,
+    parentCode: permission.parentCode,
+    route: permission.route,
+    sortOrder: permission.sortOrder,
+    isSystem: permission.isSystem,
+    pathLabel: permission.pathLabel,
     description: permission.description
   })
 );

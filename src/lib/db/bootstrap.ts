@@ -14,6 +14,7 @@ interface BootstrapResult {
   insertedRoles: number;
   patchedRoles: number;
   insertedRolePermissions: number;
+  insertedWorkspaceMemberRoles: number;
 }
 
 let initializationPromise: Promise<void> | null = null;
@@ -37,6 +38,20 @@ $$`,
   `do $$
 begin
   create type workspace_status as enum ('active', 'archived');
+exception
+  when duplicate_object then null;
+end
+$$`,
+  `do $$
+begin
+  create type permission_scope as enum ('global', 'workspace');
+exception
+  when duplicate_object then null;
+end
+$$`,
+  `do $$
+begin
+  create type permission_type as enum ('menu', 'action');
 exception
   when duplicate_object then null;
 end
@@ -180,6 +195,12 @@ $$`,
     name varchar(120) not null,
     module varchar(60) not null,
     action varchar(60) not null,
+    scope permission_scope not null default 'workspace',
+    permission_type permission_type not null default 'action',
+    parent_code varchar(120),
+    route varchar(255),
+    sort_order integer not null default 0,
+    is_system boolean not null default false,
     description text,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
@@ -190,6 +211,12 @@ $$`,
     add column if not exists name varchar(120),
     add column if not exists module varchar(60),
     add column if not exists action varchar(60),
+    add column if not exists scope permission_scope default 'workspace',
+    add column if not exists permission_type permission_type default 'action',
+    add column if not exists parent_code varchar(120),
+    add column if not exists route varchar(255),
+    add column if not exists sort_order integer default 0,
+    add column if not exists is_system boolean default false,
     add column if not exists description text,
     add column if not exists created_at timestamptz default now(),
     add column if not exists updated_at timestamptz default now()`,
@@ -202,6 +229,20 @@ $$`,
   `alter table role_permissions
     add column if not exists role_id uuid references roles(id) on delete cascade,
     add column if not exists permission_id uuid references permissions(id) on delete cascade`,
+  `create table if not exists workspace_member_roles (
+    workspace_id uuid not null references workspaces(id) on delete cascade,
+    user_id uuid not null references users(id) on delete cascade,
+    role_id uuid not null references roles(id) on delete cascade,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    primary key (workspace_id, user_id, role_id)
+  )`,
+  `alter table workspace_member_roles
+    add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+    add column if not exists user_id uuid references users(id) on delete cascade,
+    add column if not exists role_id uuid references roles(id) on delete cascade,
+    add column if not exists created_at timestamptz default now(),
+    add column if not exists updated_at timestamptz default now()`,
   `create table if not exists team_members (
     team_id uuid not null references teams(id) on delete cascade,
     user_id uuid not null references users(id) on delete cascade,
@@ -334,8 +375,24 @@ function formatSqlLiteral(value: string) {
   return `'${value.replaceAll("'", "''")}'`;
 }
 
-function formatValuesRow(values: string[]) {
-  return `(${values.map((value) => formatSqlLiteral(value)).join(', ')})`;
+function formatSqlValue(value: string | number | boolean | null) {
+  if (value === null) {
+    return 'null';
+  }
+
+  if (typeof value === 'string') {
+    return formatSqlLiteral(value);
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false';
+  }
+
+  return `${value}`;
+}
+
+function formatValuesRow(values: Array<string | number | boolean | null>) {
+  return `(${values.map((value) => formatSqlValue(value)).join(', ')})`;
 }
 
 function buildDatabaseInitializationSql() {
@@ -346,6 +403,12 @@ function buildDatabaseInitializationSql() {
         permission.name,
         permission.module,
         permission.action,
+        permission.scope,
+        permission.permissionType,
+        permission.parentCode,
+        permission.route,
+        permission.sortOrder,
+        permission.isSystem,
         permission.description
       ])
     )
@@ -378,7 +441,19 @@ on conflict (role_id, permission_id) do nothing;`;
     ...schemaInitializationStatements.map((statement) => `${statement};`),
     '',
     '-- RBAC initialization',
-    `insert into permissions (code, name, module, action, description)
+    `insert into permissions (
+  code,
+  name,
+  module,
+  action,
+  scope,
+  permission_type,
+  parent_code,
+  route,
+  sort_order,
+  is_system,
+  description
+)
 values
   ${permissionValues}
 on conflict (code) do nothing;`,
@@ -434,15 +509,33 @@ async function ensurePermissionSeeds() {
   }
 
   const seededCodes = permissionSeeds.map((permission) => permission.code);
+  const seededCodeSet = new Set(seededCodes);
   const existingPermissions = seededCodes.length
     ? await db
         .select({
           id: schema.permissions.id,
-          code: schema.permissions.code
+          code: schema.permissions.code,
+          name: schema.permissions.name,
+          module: schema.permissions.module,
+          action: schema.permissions.action,
+          scope: schema.permissions.scope,
+          permissionType: schema.permissions.permissionType,
+          parentCode: schema.permissions.parentCode,
+          route: schema.permissions.route,
+          sortOrder: schema.permissions.sortOrder,
+          isSystem: schema.permissions.isSystem,
+          description: schema.permissions.description
         })
         .from(schema.permissions)
         .where(inArray(schema.permissions.code, seededCodes))
     : [];
+  const existingSystemPermissions = await db
+    .select({
+      id: schema.permissions.id,
+      code: schema.permissions.code
+    })
+    .from(schema.permissions)
+    .where(eq(schema.permissions.isSystem, true));
 
   const existingCodeSet = new Set(
     existingPermissions.map((permission) => permission.code)
@@ -460,10 +553,73 @@ async function ensurePermissionSeeds() {
           name: permission.name,
           module: permission.module,
           action: permission.action,
+          scope: permission.scope,
+          permissionType: permission.permissionType,
+          parentCode: permission.parentCode,
+          route: permission.route,
+          sortOrder: permission.sortOrder,
+          isSystem: permission.isSystem,
           description: permission.description
         }))
       )
       .onConflictDoNothing({ target: schema.permissions.code });
+  }
+
+  const existingPermissionMap = new Map(
+    existingPermissions.map(
+      (permission) => [permission.code, permission] as const
+    )
+  );
+
+  for (const permission of permissionSeeds) {
+    const existingPermission = existingPermissionMap.get(permission.code);
+
+    if (!existingPermission) {
+      continue;
+    }
+
+    const needsPatch =
+      existingPermission.name !== permission.name ||
+      existingPermission.module !== permission.module ||
+      existingPermission.action !== permission.action ||
+      existingPermission.scope !== permission.scope ||
+      existingPermission.permissionType !== permission.permissionType ||
+      (existingPermission.parentCode ?? null) !== permission.parentCode ||
+      (existingPermission.route ?? null) !== permission.route ||
+      existingPermission.sortOrder !== permission.sortOrder ||
+      existingPermission.isSystem !== permission.isSystem ||
+      (existingPermission.description ?? null) !== permission.description;
+
+    if (!needsPatch) {
+      continue;
+    }
+
+    await db
+      .update(schema.permissions)
+      .set({
+        name: permission.name,
+        module: permission.module,
+        action: permission.action,
+        scope: permission.scope,
+        permissionType: permission.permissionType,
+        parentCode: permission.parentCode,
+        route: permission.route,
+        sortOrder: permission.sortOrder,
+        isSystem: permission.isSystem,
+        description: permission.description,
+        updatedAt: new Date()
+      })
+      .where(eq(schema.permissions.code, permission.code));
+  }
+
+  const obsoleteSystemPermissionIds = existingSystemPermissions
+    .filter((permission) => !seededCodeSet.has(permission.code))
+    .map((permission) => permission.id);
+
+  if (obsoleteSystemPermissionIds.length) {
+    await db
+      .delete(schema.permissions)
+      .where(inArray(schema.permissions.id, obsoleteSystemPermissionIds));
   }
 
   const allPermissions = seededCodes.length
@@ -645,18 +801,19 @@ async function ensureSystemRolePermissions(
 
   const roleIds = roles.map((role) => role.id);
   const existingMappings = await db
-    .select({ roleId: schema.rolePermissions.roleId })
+    .select({
+      roleId: schema.rolePermissions.roleId,
+      permissionId: schema.rolePermissions.permissionId
+    })
     .from(schema.rolePermissions)
     .where(inArray(schema.rolePermissions.roleId, roleIds));
 
-  const mappedRoleIds = new Set(
-    existingMappings.map((mapping) => mapping.roleId)
+  const existingMappingSet = new Set(
+    existingMappings.map(
+      (mapping) => `${mapping.roleId}:${mapping.permissionId}`
+    )
   );
   const rolePermissionRows = roles.flatMap((role) => {
-    if (mappedRoleIds.has(role.id)) {
-      return [];
-    }
-
     const seed = systemRoleSeeds.find(
       (candidate) => candidate.key === role.key
     );
@@ -668,6 +825,9 @@ async function ensureSystemRolePermissions(
     return seed.permissionCodes
       .map((code) => permissionIdByCode.get(code))
       .filter((permissionId): permissionId is string => Boolean(permissionId))
+      .filter(
+        (permissionId) => !existingMappingSet.has(`${role.id}:${permissionId}`)
+      )
       .map((permissionId) => ({
         roleId: role.id,
         permissionId
@@ -690,13 +850,109 @@ async function ensureSystemRolePermissions(
   return rolePermissionRows.length;
 }
 
+async function ensureWorkspaceMemberRoleAssignments(
+  roles: {
+    id: string;
+    workspaceId: string;
+    key: string;
+  }[]
+) {
+  if (!db || !roles.length) {
+    return 0;
+  }
+
+  const targetWorkspaceIds = Array.from(
+    new Set(roles.map((role) => role.workspaceId))
+  );
+  const roleIdByWorkspaceAndKey = new Map(
+    roles.map((role) => [`${role.workspaceId}:${role.key}`, role.id] as const)
+  );
+  const workspaceMemberships = await db
+    .select({
+      workspaceId: schema.workspaceMembers.workspaceId,
+      userId: schema.workspaceMembers.userId,
+      systemRole: schema.users.systemRole
+    })
+    .from(schema.workspaceMembers)
+    .innerJoin(
+      schema.users,
+      eq(schema.workspaceMembers.userId, schema.users.id)
+    )
+    .where(inArray(schema.workspaceMembers.workspaceId, targetWorkspaceIds));
+
+  const existingAssignments = await db
+    .select({
+      workspaceId: schema.workspaceMemberRoles.workspaceId,
+      userId: schema.workspaceMemberRoles.userId
+    })
+    .from(schema.workspaceMemberRoles)
+    .where(
+      inArray(schema.workspaceMemberRoles.workspaceId, targetWorkspaceIds)
+    );
+
+  const existingAssignmentSet = new Set(
+    existingAssignments.map(
+      (assignment) => `${assignment.workspaceId}:${assignment.userId}`
+    )
+  );
+  const roleAssignmentsToInsert = workspaceMemberships
+    .filter(
+      (membership) =>
+        !existingAssignmentSet.has(
+          `${membership.workspaceId}:${membership.userId}`
+        )
+    )
+    .map((membership) => {
+      const roleId = roleIdByWorkspaceAndKey.get(
+        `${membership.workspaceId}:${membership.systemRole}`
+      );
+
+      if (!roleId) {
+        return null;
+      }
+
+      return {
+        workspaceId: membership.workspaceId,
+        userId: membership.userId,
+        roleId
+      };
+    })
+    .filter(
+      (
+        assignment
+      ): assignment is {
+        workspaceId: string;
+        userId: string;
+        roleId: string;
+      } => Boolean(assignment)
+    );
+
+  if (!roleAssignmentsToInsert.length) {
+    return 0;
+  }
+
+  await db
+    .insert(schema.workspaceMemberRoles)
+    .values(roleAssignmentsToInsert)
+    .onConflictDoNothing({
+      target: [
+        schema.workspaceMemberRoles.workspaceId,
+        schema.workspaceMemberRoles.userId,
+        schema.workspaceMemberRoles.roleId
+      ]
+    });
+
+  return roleAssignmentsToInsert.length;
+}
+
 export async function ensureWorkspaceRbacInitialized(workspaceIds?: string[]) {
   if (!db) {
     return {
       insertedPermissions: 0,
       insertedRoles: 0,
       patchedRoles: 0,
-      insertedRolePermissions: 0
+      insertedRolePermissions: 0,
+      insertedWorkspaceMemberRoles: 0
     } satisfies BootstrapResult;
   }
 
@@ -708,12 +964,15 @@ export async function ensureWorkspaceRbacInitialized(workspaceIds?: string[]) {
     roles,
     permissionIdByCode
   );
+  const insertedWorkspaceMemberRoles =
+    await ensureWorkspaceMemberRoleAssignments(roles);
 
   return {
     insertedPermissions,
     insertedRoles,
     patchedRoles,
-    insertedRolePermissions
+    insertedRolePermissions,
+    insertedWorkspaceMemberRoles
   } satisfies BootstrapResult;
 }
 
@@ -731,7 +990,8 @@ export async function ensureDatabaseInitialized() {
         result.insertedPermissions ||
         result.insertedRoles ||
         result.patchedRoles ||
-        result.insertedRolePermissions
+        result.insertedRolePermissions ||
+        result.insertedWorkspaceMemberRoles
       ) {
         console.info('[db:init] database bootstrap completed', result);
       }

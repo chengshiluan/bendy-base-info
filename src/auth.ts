@@ -9,6 +9,7 @@ import {
   findUserByGithubUsername,
   syncGithubProfile
 } from '@/lib/auth/service';
+import { normalizeWorkspacePermissionMap } from '@/lib/auth/permission';
 import { consumeLoginCode } from '@/lib/auth/email-code';
 
 const credentialsSchema = z.object({
@@ -124,6 +125,7 @@ export const authOptions: NextAuthOptions = {
         token.githubUsername = user.githubUsername;
         token.systemRole = user.systemRole;
         token.permissions = user.permissions;
+        token.workspacePermissions = user.workspacePermissions;
         token.workspaceIds = user.workspaceIds;
         token.defaultWorkspaceId = user.defaultWorkspaceId;
         token.name = user.name;
@@ -131,29 +133,32 @@ export const authOptions: NextAuthOptions = {
         token.picture = user.image;
       }
 
-      if (account?.provider === 'github') {
-        const githubLogin = getGithubProfileValue(profile, 'login');
-        const githubUsername =
-          typeof githubLogin === 'string'
-            ? githubLogin.toLowerCase()
+      const githubLogin =
+        account?.provider === 'github'
+          ? getGithubProfileValue(profile, 'login')
+          : undefined;
+      const githubUsername =
+        typeof githubLogin === 'string' ? githubLogin.toLowerCase() : undefined;
+      const snapshotUserId =
+        typeof token.id === 'string'
+          ? token.id
+          : githubUsername
+            ? (await findUserByGithubUsername(githubUsername))?.id
             : undefined;
 
-        if (githubUsername) {
-          const authUser = await findUserByGithubUsername(githubUsername);
-          if (authUser) {
-            const snapshot = await buildAuthUserSnapshot(authUser.id);
-            if (snapshot) {
-              token.id = snapshot.id;
-              token.githubUsername = snapshot.githubUsername;
-              token.systemRole = snapshot.systemRole;
-              token.permissions = snapshot.permissions;
-              token.workspaceIds = snapshot.workspaceIds;
-              token.defaultWorkspaceId = snapshot.defaultWorkspaceId;
-              token.name = snapshot.name;
-              token.email = snapshot.email;
-              token.picture = snapshot.image;
-            }
-          }
+      if (snapshotUserId) {
+        const snapshot = await buildAuthUserSnapshot(snapshotUserId);
+        if (snapshot) {
+          token.id = snapshot.id;
+          token.githubUsername = snapshot.githubUsername;
+          token.systemRole = snapshot.systemRole;
+          token.permissions = snapshot.permissions;
+          token.workspacePermissions = snapshot.workspacePermissions;
+          token.workspaceIds = snapshot.workspaceIds;
+          token.defaultWorkspaceId = snapshot.defaultWorkspaceId;
+          token.name = snapshot.name;
+          token.email = snapshot.email;
+          token.picture = snapshot.image;
         }
       }
 
@@ -175,6 +180,9 @@ export const authOptions: NextAuthOptions = {
               (value): value is string => typeof value === 'string'
             )
           : [];
+        session.user.workspacePermissions = normalizeWorkspacePermissionMap(
+          token.workspacePermissions
+        );
         session.user.workspaceIds = Array.isArray(token.workspaceIds)
           ? token.workspaceIds.filter(
               (value): value is string => typeof value === 'string'

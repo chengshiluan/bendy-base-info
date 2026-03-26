@@ -262,6 +262,109 @@ async function ensurePermissionIdsExist(permissionIds: string[]) {
   }
 }
 
+async function ensureRoleIdsBelongToWorkspace(
+  workspaceId: string,
+  roleIds: string[]
+) {
+  const normalizedRoleIds = uniqueValues(roleIds);
+
+  if (!normalizedRoleIds.length) {
+    return [];
+  }
+
+  const database = requireDatabase();
+  const rows = await database
+    .select({
+      id: schema.roles.id
+    })
+    .from(schema.roles)
+    .where(
+      and(
+        eq(schema.roles.workspaceId, workspaceId),
+        inArray(schema.roles.id, normalizedRoleIds)
+      )
+    );
+
+  if (rows.length !== normalizedRoleIds.length) {
+    throw new PlatformMutationError('选择的角色里包含无效项。', 400);
+  }
+
+  return normalizedRoleIds;
+}
+
+async function expandWorkspacePermissionIds(permissionIds: string[]) {
+  const normalizedPermissionIds = uniqueValues(permissionIds);
+
+  if (!normalizedPermissionIds.length) {
+    return [];
+  }
+
+  const database = requireDatabase();
+  const rows = await database
+    .select({
+      id: schema.permissions.id,
+      code: schema.permissions.code,
+      parentCode: schema.permissions.parentCode,
+      scope: schema.permissions.scope
+    })
+    .from(schema.permissions);
+
+  const permissionById = new Map(rows.map((row) => [row.id, row] as const));
+  const permissionByCode = new Map(rows.map((row) => [row.code, row] as const));
+
+  normalizedPermissionIds.forEach((permissionId) => {
+    const row = permissionById.get(permissionId);
+
+    if (!row || row.scope !== 'workspace') {
+      throw new PlatformMutationError('角色只能绑定工作区级权限。', 400);
+    }
+  });
+
+  const expandedPermissionIds = new Set(normalizedPermissionIds);
+
+  normalizedPermissionIds.forEach((permissionId) => {
+    let current = permissionById.get(permissionId);
+
+    while (current?.parentCode) {
+      const parent = permissionByCode.get(current.parentCode);
+      if (!parent || parent.scope !== 'workspace') {
+        break;
+      }
+
+      expandedPermissionIds.add(parent.id);
+      current = parent;
+    }
+  });
+
+  return Array.from(expandedPermissionIds);
+}
+
+async function resolveWorkspaceRoleIds(
+  workspaceId: string,
+  systemRole: 'super_admin' | 'admin' | 'member',
+  requestedRoleIds: string[]
+) {
+  await ensureWorkspaceRbacInitialized([workspaceId]);
+
+  const normalizedRoleIds = uniqueValues(requestedRoleIds);
+  if (normalizedRoleIds.length) {
+    return ensureRoleIdsBelongToWorkspace(workspaceId, normalizedRoleIds);
+  }
+
+  const database = requireDatabase();
+  const [defaultRole] = await database
+    .select({ id: schema.roles.id })
+    .from(schema.roles)
+    .where(
+      and(
+        eq(schema.roles.workspaceId, workspaceId),
+        eq(schema.roles.key, systemRole)
+      )
+    );
+
+  return defaultRole ? [defaultRole.id] : [];
+}
+
 async function ensureNotificationTarget(
   workspaceId?: string | null,
   userId?: string | null
@@ -345,6 +448,37 @@ async function syncRolePermissions(roleId: string, permissionIds: string[]) {
     uniquePermissionIds.map((permissionId) => ({
       roleId,
       permissionId
+    }))
+  );
+}
+
+async function syncWorkspaceMemberRoles(
+  workspaceId: string,
+  userId: string,
+  roleIds: string[]
+) {
+  const database = requireDatabase();
+
+  await database
+    .delete(schema.workspaceMemberRoles)
+    .where(
+      and(
+        eq(schema.workspaceMemberRoles.workspaceId, workspaceId),
+        eq(schema.workspaceMemberRoles.userId, userId)
+      )
+    );
+
+  const uniqueRoleIds = uniqueValues(roleIds);
+
+  if (!uniqueRoleIds.length) {
+    return;
+  }
+
+  await database.insert(schema.workspaceMemberRoles).values(
+    uniqueRoleIds.map((roleId) => ({
+      workspaceId,
+      userId,
+      roleId
     }))
   );
 }
@@ -614,6 +748,7 @@ export async function createUser(
     systemRole: 'super_admin' | 'admin' | 'member';
     status: 'active' | 'invited' | 'disabled';
     emailLoginEnabled: boolean;
+    roleIds: string[];
   }
 ) {
   const database = requireDatabase();
@@ -666,6 +801,12 @@ export async function createUser(
   }
 
   await ensureWorkspaceMember(input.workspaceId, userId);
+  const assignedRoleIds = await resolveWorkspaceRoleIds(
+    input.workspaceId,
+    input.systemRole,
+    input.roleIds
+  );
+  await syncWorkspaceMemberRoles(input.workspaceId, userId, assignedRoleIds);
 
   await recordAuditLog({
     workspaceId: input.workspaceId,
@@ -678,7 +819,8 @@ export async function createUser(
       : `在工作区 ${workspaceName} 中录入了 GitHub 用户 @${githubUsername}。`,
     metadata: {
       githubUsername,
-      workspaceId: input.workspaceId
+      workspaceId: input.workspaceId,
+      roleIds: assignedRoleIds
     }
   });
 
@@ -734,12 +876,14 @@ export async function importGithubUsersToWorkspace(
         githubUserId: schema.users.githubUserId,
         displayName: schema.users.displayName,
         avatarUrl: schema.users.avatarUrl,
-        bio: schema.users.bio
+        bio: schema.users.bio,
+        systemRole: schema.users.systemRole
       })
       .from(schema.users)
       .where(eq(schema.users.githubUsername, githubUser.githubUsername));
 
     let userId = existingUser?.id;
+    let currentSystemRole = existingUser?.systemRole ?? 'member';
 
     if (!existingUser) {
       const [createdUser] = await database
@@ -757,6 +901,7 @@ export async function importGithubUsersToWorkspace(
         .returning({ id: schema.users.id });
 
       userId = createdUser.id;
+      currentSystemRole = 'member';
     } else {
       const updates: {
         githubUserId?: string;
@@ -810,6 +955,25 @@ export async function importGithubUsersToWorkspace(
     if (!membership) {
       await ensureWorkspaceMember(input.workspaceId, userId);
     }
+    const existingRoleMappings = await database
+      .select({ roleId: schema.workspaceMemberRoles.roleId })
+      .from(schema.workspaceMemberRoles)
+      .where(
+        and(
+          eq(schema.workspaceMemberRoles.workspaceId, input.workspaceId),
+          eq(schema.workspaceMemberRoles.userId, userId)
+        )
+      )
+      .limit(1);
+
+    if (!existingRoleMappings.length) {
+      const defaultRoleIds = await resolveWorkspaceRoleIds(
+        input.workspaceId,
+        currentSystemRole,
+        []
+      );
+      await syncWorkspaceMemberRoles(input.workspaceId, userId, defaultRoleIds);
+    }
 
     importedUsers.push({
       id: userId,
@@ -847,6 +1011,7 @@ export async function updateUser(
     systemRole: 'super_admin' | 'admin' | 'member';
     status: 'active' | 'invited' | 'disabled';
     emailLoginEnabled: boolean;
+    roleIds: string[];
   }
 ) {
   const database = requireDatabase();
@@ -887,6 +1052,12 @@ export async function updateUser(
     .where(eq(schema.users.id, userId));
 
   await ensureWorkspaceMember(input.workspaceId, userId);
+  const assignedRoleIds = await resolveWorkspaceRoleIds(
+    input.workspaceId,
+    input.systemRole,
+    input.roleIds
+  );
+  await syncWorkspaceMemberRoles(input.workspaceId, userId, assignedRoleIds);
 
   await recordAuditLog({
     workspaceId: input.workspaceId,
@@ -897,7 +1068,8 @@ export async function updateUser(
     summary: `更新了 GitHub 用户 @${githubUsername} 的资料与登录状态。`,
     metadata: {
       githubUsername,
-      workspaceId: input.workspaceId
+      workspaceId: input.workspaceId,
+      roleIds: assignedRoleIds
     }
   });
 
@@ -942,7 +1114,7 @@ export async function createRole(
 ) {
   const database = requireDatabase();
   const key = slugify(input.key).replace(/-/g, '_');
-  const permissionIds = uniqueValues(input.permissionIds);
+  const permissionIds = await expandWorkspacePermissionIds(input.permissionIds);
 
   await getWorkspaceRecord(input.workspaceId);
   await ensureRoleKeyAvailable(input.workspaceId, key);
@@ -990,7 +1162,7 @@ export async function updateRole(
   const database = requireDatabase();
   const role = await getRoleSummaryById(roleId, input.workspaceId);
   const key = slugify(input.key).replace(/-/g, '_');
-  const permissionIds = uniqueValues(input.permissionIds);
+  const permissionIds = await expandWorkspacePermissionIds(input.permissionIds);
 
   await getWorkspaceRecord(input.workspaceId);
   await ensureRoleKeyAvailable(input.workspaceId, key, roleId);
@@ -1079,6 +1251,12 @@ export async function createPermission(
       name: input.name.trim(),
       module: moduleName,
       action: actionName,
+      scope: 'workspace',
+      permissionType: 'action',
+      parentCode: null,
+      route: null,
+      sortOrder: 0,
+      isSystem: false,
       description: normalizeNullable(input.description)
     })
     .returning({ id: schema.permissions.id });
@@ -1112,6 +1290,11 @@ export async function updatePermission(
 ) {
   const database = requireDatabase();
   const permission = await getPermissionSummaryById(permissionId);
+
+  if (permission.isSystem) {
+    throw new PlatformMutationError('系统内置权限不允许手动编辑。', 400);
+  }
+
   const moduleName = slugify(input.module).replace(/-/g, '_');
   const actionName = slugify(input.action).replace(/-/g, '_');
   const code =
@@ -1127,6 +1310,12 @@ export async function updatePermission(
       name: input.name.trim(),
       module: moduleName,
       action: actionName,
+      scope: permission.scope,
+      permissionType: permission.permissionType,
+      parentCode: permission.parentCode ?? null,
+      route: permission.route ?? null,
+      sortOrder: permission.sortOrder,
+      isSystem: permission.isSystem,
       description: normalizeNullable(input.description),
       updatedAt: new Date()
     })
@@ -1151,6 +1340,10 @@ export async function updatePermission(
 export async function deletePermission(permissionId: string, actorId: string) {
   const database = requireDatabase();
   const permission = await getPermissionSummaryById(permissionId);
+
+  if (permission.isSystem) {
+    throw new PlatformMutationError('系统内置权限不允许删除。', 400);
+  }
 
   await database
     .delete(schema.permissions)

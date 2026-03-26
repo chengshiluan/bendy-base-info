@@ -3,16 +3,25 @@
 import { useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import type { NavItem } from '@/types';
+import { hasPermission } from '@/lib/auth/permission';
+
+function readWorkspaceCookie() {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const target = document.cookie
+    .split('; ')
+    .find((cookie) => cookie.startsWith('active_workspace_id='));
+
+  return target ? decodeURIComponent(target.split('=')[1]) : null;
+}
 
 export function useFilteredNavItems(items: NavItem[]) {
   const { data } = useSession();
-  const permissions = useMemo(
-    () => data?.user?.permissions ?? [],
-    [data?.user?.permissions]
-  );
-  const role = data?.user?.systemRole;
+  const user = data?.user;
   const hasWorkspace = Boolean(data?.user?.workspaceIds?.length);
-  const hasWildcard = permissions.includes('*');
+  const activeWorkspaceId = readWorkspaceCookie();
 
   return useMemo(() => {
     const canAccess = (item?: NavItem) => {
@@ -24,14 +33,17 @@ export function useFilteredNavItems(items: NavItem[]) {
         return false;
       }
 
-      if (item.access.role && role !== item.access.role && !hasWildcard) {
+      if (item.access.role && user?.systemRole !== item.access.role) {
+        return false;
+      }
+
+      if (!user) {
         return false;
       }
 
       if (
         item.access.permission &&
-        !hasWildcard &&
-        !permissions.includes(item.access.permission)
+        !hasPermission(user, item.access.permission, activeWorkspaceId)
       ) {
         return false;
       }
@@ -43,5 +55,5 @@ export function useFilteredNavItems(items: NavItem[]) {
       ...item,
       items: item.items?.filter(canAccess) ?? []
     }));
-  }, [hasWildcard, hasWorkspace, items, permissions, role]);
+  }, [activeWorkspaceId, hasWorkspace, items, user]);
 }

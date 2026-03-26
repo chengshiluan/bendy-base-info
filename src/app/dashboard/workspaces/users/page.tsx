@@ -1,18 +1,36 @@
 import PageContainer from '@/components/layout/page-container';
 import { UsersManagementClient } from '@/features/management/components/users-management-client';
-import { requireSession } from '@/lib/auth/session';
+import { hasPermission } from '@/lib/auth/permission';
+import { requirePagePermission } from '@/lib/auth/session';
 import { getActiveWorkspaceCookie } from '@/lib/auth/workspace';
-import { listUsersPage } from '@/lib/platform/service';
+import { listRoleOptions, listUsersPage } from '@/lib/platform/service';
+import {
+  actionPermissionCode,
+  menuPermissionCode
+} from '@/lib/platform/rbac';
 
 export default async function UsersPage() {
-  const session = await requireSession();
+  const cookieWorkspaceId = await getActiveWorkspaceCookie();
+  const session = await requirePagePermission(
+    menuPermissionCode('dashboard', 'workspaces', 'users'),
+    cookieWorkspaceId
+  );
   const activeWorkspaceId =
-    (await getActiveWorkspaceCookie()) ||
-    session.user.defaultWorkspaceId ||
-    undefined;
-  const { items, pagination } = await listUsersPage({
-    workspaceId: activeWorkspaceId
-  });
+    cookieWorkspaceId || session.user.defaultWorkspaceId || undefined;
+  const emptyPagination = {
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    totalPages: 1
+  };
+  const [{ items, pagination }, roleOptions] = activeWorkspaceId
+    ? await Promise.all([
+        listUsersPage({
+          workspaceId: activeWorkspaceId
+        }),
+        listRoleOptions(activeWorkspaceId)
+      ])
+    : [{ items: [], pagination: emptyPagination }, []];
 
   return (
     <PageContainer
@@ -24,6 +42,39 @@ export default async function UsersPage() {
         initialUsers={items}
         initialPagination={pagination}
         workspaceId={activeWorkspaceId}
+        roleOptions={roleOptions}
+        access={{
+          canCreate: hasPermission(
+            session.user,
+            actionPermissionCode(
+              'create',
+              'dashboard',
+              'workspaces',
+              'users'
+            ),
+            activeWorkspaceId
+          ),
+          canUpdate: hasPermission(
+            session.user,
+            actionPermissionCode(
+              'update',
+              'dashboard',
+              'workspaces',
+              'users'
+            ),
+            activeWorkspaceId
+          ),
+          canDelete: hasPermission(
+            session.user,
+            actionPermissionCode(
+              'delete',
+              'dashboard',
+              'workspaces',
+              'users'
+            ),
+            activeWorkspaceId
+          )
+        }}
       />
     </PageContainer>
   );

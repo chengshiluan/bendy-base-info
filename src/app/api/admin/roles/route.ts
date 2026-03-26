@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireManagerApi } from '@/lib/auth/api-guard';
+import { requireApiPermission } from '@/lib/auth/api-guard';
 import {
   getPaginationParams,
   getSearchParam,
@@ -7,12 +7,16 @@ import {
   parseJsonRequest
 } from '@/lib/platform/api';
 import { createRole } from '@/lib/platform/mutations';
+import { actionPermissionCode, menuPermissionCode } from '@/lib/platform/rbac';
 import { listRolesPage } from '@/lib/platform/service';
 import { rolePayloadSchema } from '@/lib/platform/validators';
 
 export async function GET(request: Request) {
   const workspaceId = getSearchParam(request, 'workspaceId');
-  const { response } = await requireManagerApi(workspaceId);
+  const { response } = await requireApiPermission(
+    menuPermissionCode('dashboard', 'workspaces', 'roles'),
+    workspaceId
+  );
 
   if (response) {
     return response;
@@ -41,7 +45,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const { session, response } = await requireManagerApi(
+  const { session, response } = await requireApiPermission(
+    actionPermissionCode('create', 'dashboard', 'workspaces', 'roles'),
     parsed.data.workspaceId
   );
 

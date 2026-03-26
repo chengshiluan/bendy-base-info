@@ -1,5 +1,6 @@
 import { and, asc, count, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { db, schema } from '@/lib/db';
+import { getPermissionSeed } from './rbac';
 import { paginateItems } from './pagination';
 import {
   demoAuditLogs,
@@ -163,12 +164,16 @@ export async function listRoleOptions(
   }));
 }
 
-export async function listPermissionOptions(): Promise<OptionItem[]> {
+export async function listPermissionOptions(
+  scope: PermissionSummary['scope'] | 'all' = 'workspace'
+): Promise<OptionItem[]> {
   const permissions = await listPermissions();
-  return permissions.map((permission) => ({
-    label: `${permission.name} (${permission.code})`,
+  return permissions
+    .filter((permission) => scope === 'all' || permission.scope === scope)
+    .map((permission) => ({
+    label: `${permission.pathLabel} (${permission.code})`,
     value: permission.id
-  }));
+    }));
 }
 
 export async function getDashboardMetrics() {
@@ -480,12 +485,47 @@ export async function listUsers(
     workspaceMap.set(membership.userId, current);
   });
 
+  const roleRows =
+    activeWorkspaceId && userIds.length
+      ? await database
+          .select({
+            userId: schema.workspaceMemberRoles.userId,
+            roleId: schema.workspaceMemberRoles.roleId,
+            roleName: schema.roles.name
+          })
+          .from(schema.workspaceMemberRoles)
+          .innerJoin(
+            schema.roles,
+            eq(schema.workspaceMemberRoles.roleId, schema.roles.id)
+          )
+          .where(
+            and(
+              eq(schema.workspaceMemberRoles.workspaceId, activeWorkspaceId),
+              inArray(schema.workspaceMemberRoles.userId, userIds)
+            )
+          )
+      : [];
+
+  const roleIdMap = new Map<string, string[]>();
+  const roleNameMap = new Map<string, string[]>();
+  roleRows.forEach((roleRow) => {
+    const currentRoleIds = roleIdMap.get(roleRow.userId) ?? [];
+    currentRoleIds.push(roleRow.roleId);
+    roleIdMap.set(roleRow.userId, currentRoleIds);
+
+    const currentRoleNames = roleNameMap.get(roleRow.userId) ?? [];
+    currentRoleNames.push(roleRow.roleName);
+    roleNameMap.set(roleRow.userId, currentRoleNames);
+  });
+
   return rows.map((user) => ({
     ...user,
     displayName: user.displayName ?? null,
     email: user.email ?? null,
     emailLoginEnabled: user.emailLoginEnabled,
-    workspaceIds: workspaceMap.get(user.id) ?? []
+    workspaceIds: workspaceMap.get(user.id) ?? [],
+    roleIds: roleIdMap.get(user.id) ?? [],
+    roleNames: roleNameMap.get(user.id) ?? []
   }));
 }
 
@@ -585,18 +625,70 @@ export async function listPermissions(): Promise<PermissionSummary[]> {
   }
 
   const database = db;
-
-  return database
+  const rows = await database
     .select({
       id: schema.permissions.id,
       module: schema.permissions.module,
       action: schema.permissions.action,
       code: schema.permissions.code,
       name: schema.permissions.name,
+      scope: schema.permissions.scope,
+      permissionType: schema.permissions.permissionType,
+      parentCode: schema.permissions.parentCode,
+      route: schema.permissions.route,
+      sortOrder: schema.permissions.sortOrder,
+      isSystem: schema.permissions.isSystem,
       description: schema.permissions.description
     })
-    .from(schema.permissions)
-    .orderBy(asc(schema.permissions.module), asc(schema.permissions.action));
+    .from(schema.permissions);
+
+  const rowMap = new Map(rows.map((row) => [row.code, row] as const));
+  const pathCache = new Map<string, string>();
+
+  const buildPathLabel = (code: string): string => {
+    const cached = pathCache.get(code);
+    if (cached) {
+      return cached;
+    }
+
+    const seededPermission = getPermissionSeed(code);
+    if (seededPermission) {
+      pathCache.set(code, seededPermission.pathLabel);
+      return seededPermission.pathLabel;
+    }
+
+    const row = rowMap.get(code);
+    if (!row) {
+      pathCache.set(code, code);
+      return code;
+    }
+
+    const currentLabel =
+      row.permissionType === 'menu' ? row.name.replace(/菜单$/, '') : row.name;
+
+    if (!row.parentCode) {
+      pathCache.set(code, currentLabel);
+      return currentLabel;
+    }
+
+    const label = `${buildPathLabel(row.parentCode)} / ${currentLabel}`;
+    pathCache.set(code, label);
+    return label;
+  };
+
+  return rows
+    .map((row) => ({
+      ...row,
+      description: row.description ?? null,
+      pathLabel: buildPathLabel(row.code)
+    }))
+    .sort((left, right) => {
+      if (left.sortOrder !== right.sortOrder) {
+        return left.sortOrder - right.sortOrder;
+      }
+
+      return left.pathLabel.localeCompare(right.pathLabel, 'zh-CN');
+    });
 }
 
 export async function listPermissionsPage(
@@ -608,6 +700,7 @@ export async function listPermissionsPage(
     matchesKeyword(keyword, [
       permission.name,
       permission.code,
+      permission.pathLabel,
       permission.module,
       permission.action
     ])
