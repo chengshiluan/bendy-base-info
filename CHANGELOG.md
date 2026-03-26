@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.3 - 2026-03-26
+
+### Added
+
+- 团队管理新增 GitHub 成员搜索子弹窗，支持批量选择并加入团队待选成员
+- 新增 `/api/admin/users/github-search` 与 `/api/admin/users/github-import` 两个后台接口
+
+### Changed
+
+- 团队成员添加流程严格按 `users -> workspace_members -> team_members` 关系表链路执行
+- 项目版本号统一升级为 `0.1.3`
+
 ## 0.1.2 - 2026-03-25
 
 ### Changed

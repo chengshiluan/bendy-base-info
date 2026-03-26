@@ -120,3 +120,18 @@ export interface OptionItem {
   label: string;
   value: string;
 }
+
+export interface GithubSearchUser {
+  githubUsername: string;
+  githubUserId: string;
+  avatarUrl: string | null;
+  profileUrl: string;
+}
+
+export interface ImportedWorkspaceGithubUser {
+  id: string;
+  githubUsername: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  alreadyInWorkspace: boolean;
+}

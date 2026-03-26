@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,9 +37,14 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import type { OptionItem, TeamSummary } from '@/lib/platform/types';
+import type {
+  ImportedWorkspaceGithubUser,
+  OptionItem,
+  TeamSummary
+} from '@/lib/platform/types';
 import { ConfirmActionDialog } from './confirm-action-dialog';
 import { OptionCheckboxGroup } from './option-checkbox-group';
+import { TeamGithubMemberPickerDialog } from './team-github-member-picker-dialog';
 import { getErrorMessage, requestJson } from '../lib/client';
 
 interface TeamsManagementClientProps {
@@ -65,14 +71,50 @@ function createDefaultForm(): TeamFormState {
   };
 }
 
+function buildMemberOptionLabel(user: {
+  githubUsername: string;
+  displayName: string | null;
+}) {
+  return `${user.displayName || user.githubUsername} (@${user.githubUsername})`;
+}
+
+function mergeMemberOptions(
+  currentOptions: OptionItem[],
+  importedUsers: ImportedWorkspaceGithubUser[]
+) {
+  const nextOptions = new Map(
+    currentOptions.map((option) => [option.value, option] as const)
+  );
+
+  importedUsers.forEach((user) => {
+    nextOptions.set(user.id, {
+      value: user.id,
+      label: buildMemberOptionLabel(user)
+    });
+  });
+
+  return Array.from(nextOptions.values()).sort((left, right) =>
+    left.label.localeCompare(right.label, 'zh-CN')
+  );
+}
+
+function mergeMemberIds(currentIds: string[], importedUsers: ImportedWorkspaceGithubUser[]) {
+  return Array.from(
+    new Set([...currentIds, ...importedUsers.map((user) => user.id)])
+  );
+}
+
 export function TeamsManagementClient({
   initialTeams,
   workspaceId,
   memberOptions
 }: TeamsManagementClientProps) {
   const [teams, setTeams] = useState(initialTeams);
+  const [availableMemberOptions, setAvailableMemberOptions] =
+    useState(memberOptions);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [githubPickerOpen, setGithubPickerOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [submitPending, setSubmitPending] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
@@ -108,6 +150,7 @@ export function TeamsManagementClient({
   function openCreateDialog() {
     setEditingTeam(null);
     setForm(createDefaultForm());
+    setGithubPickerOpen(false);
     setDialogOpen(true);
   }
 
@@ -120,7 +163,18 @@ export function TeamsManagementClient({
       leadUserId: team.leadUserId ?? '',
       memberIds: team.memberIds ?? []
     });
+    setGithubPickerOpen(false);
     setDialogOpen(true);
+  }
+
+  function handleGithubMembersImported(importedUsers: ImportedWorkspaceGithubUser[]) {
+    setAvailableMemberOptions((current) =>
+      mergeMemberOptions(current, importedUsers)
+    );
+    setForm((current) => ({
+      ...current,
+      memberIds: mergeMemberIds(current.memberIds, importedUsers)
+    }));
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -156,6 +210,7 @@ export function TeamsManagementClient({
 
       await refreshTeams();
       setDialogOpen(false);
+      setGithubPickerOpen(false);
       setForm(createDefaultForm());
       setEditingTeam(null);
     } catch (error) {
@@ -290,6 +345,7 @@ export function TeamsManagementClient({
         onOpenChange={(open) => {
           setDialogOpen(open);
           if (!open) {
+            setGithubPickerOpen(false);
             setEditingTeam(null);
             setForm(createDefaultForm());
           }
@@ -361,7 +417,7 @@ export function TeamsManagementClient({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value='none'>暂不设置</SelectItem>
-                  {memberOptions.map((option) => (
+                  {availableMemberOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
@@ -370,9 +426,21 @@ export function TeamsManagementClient({
               </Select>
             </div>
             <div className='grid gap-2'>
-              <label className='text-sm font-medium'>团队成员</label>
+              <div className='flex items-center justify-between gap-3'>
+                <label className='text-sm font-medium'>团队成员</label>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='icon'
+                  onClick={() => setGithubPickerOpen(true)}
+                  aria-label='从 GitHub 添加团队成员'
+                  title='从 GitHub 添加团队成员'
+                >
+                  <Plus />
+                </Button>
+              </div>
               <OptionCheckboxGroup
-                options={memberOptions}
+                options={availableMemberOptions}
                 value={form.memberIds}
                 onChange={(memberIds) =>
                   setForm((current) => ({ ...current, memberIds }))
@@ -399,6 +467,15 @@ export function TeamsManagementClient({
           </form>
         </DialogContent>
       </Dialog>
+
+      {workspaceId ? (
+        <TeamGithubMemberPickerDialog
+          open={githubPickerOpen}
+          onOpenChange={setGithubPickerOpen}
+          workspaceId={workspaceId}
+          onImported={handleGithubMembersImported}
+        />
+      ) : null}
 
       <ConfirmActionDialog
         open={deleteOpen}

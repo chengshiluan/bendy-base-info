@@ -36,6 +36,23 @@
 
 ## 最近开发记录
 
+### 2026-03-26 - 团队成员 GitHub 搜索添加与版本升级 0.1.3
+
+- 完成事项：
+  - 严查团队管理相关真实数据库结构，核对 `users`、`workspaces`、`workspace_members`、`teams`、`team_members` 5 张表的字段、主键、外键和唯一索引
+  - 为团队管理新增 GitHub 成员搜索能力，新增 `/api/admin/users/github-search` 搜索接口
+  - 新增 `/api/admin/users/github-import` 批量导入接口，按规范先补 `users`，再补 `workspace_members`，最后由团队表单提交时写入 `team_members`
+  - 在新增/编辑团队弹窗的“团队成员”区域增加 `+` 按钮，点击后打开子弹窗，支持搜索 GitHub 用户、批量勾选、批量加入团队待选成员
+  - 为新一轮交付同步升级版本号到 `0.1.3`，并更新 `CHANGELOG.md`、`README.md`、`docs/PLAN.md`、`src/lib/app-info.ts`
+- 验证：
+  - 在 Node `24.11.0` 环境下查询真实数据库，确认上述 5 张表已存在，且字段结构、关系约束与代码 schema 一致
+  - 在 Node `24.11.0` 环境下执行 `npx tsc --noEmit`，通过
+  - 在 Node `24.11.0` 环境下执行 `npm run lint`，通过；保留 2 条既有 `react-hooks/incompatible-library` warning（`src/components/forms/demo-form.tsx`、`src/hooks/use-data-table.ts`）
+  - 在 Node `24.11.0` 环境下执行 `npm run build`，通过
+- 后续待办：
+  - 如 GitHub 搜索使用频率升高，可考虑补充专用 `GITHUB_API_TOKEN` 以缓解公共速率限制
+  - 视需要更新 `baseline-browser-mapping` 开发依赖，消除构建阶段的过期提示
+
 ### 2026-03-26 - 登录页 UI 重构与缩放校准
 
 - 完成事项：

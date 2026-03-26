@@ -2,6 +2,7 @@ import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/lib/db';
 import { slugify } from '@/lib/utils';
 import { recordAuditLog } from './audit';
+import { getGithubUserByUsername, GithubApiError } from './github';
 import {
   listAdminNotifications,
   listAuditLogs,
@@ -12,7 +13,11 @@ import {
   listTickets,
   listUsers
 } from './service';
-import type { FileAssetSummary, WorkspaceSummary } from './types';
+import type {
+  FileAssetSummary,
+  ImportedWorkspaceGithubUser,
+  WorkspaceSummary
+} from './types';
 
 export class PlatformMutationError extends Error {
   status: number;
@@ -676,6 +681,157 @@ export async function createUser(
   });
 
   return getUserSummaryById(userId, input.workspaceId);
+}
+
+export async function importGithubUsersToWorkspace(
+  actorId: string,
+  input: {
+    workspaceId: string;
+    githubUsernames: string[];
+  }
+): Promise<ImportedWorkspaceGithubUser[]> {
+  const database = requireDatabase();
+  const workspace = await getWorkspaceRecord(input.workspaceId);
+  const githubUsernames = uniqueValues(
+    input.githubUsernames.map((value) =>
+      value.trim().replace(/^@/, '').toLowerCase()
+    )
+  );
+
+  if (!githubUsernames.length) {
+    throw new PlatformMutationError('至少选择一个 GitHub 用户。');
+  }
+
+  if (githubUsernames.length > 20) {
+    throw new PlatformMutationError('一次最多添加 20 个 GitHub 用户。');
+  }
+
+  const importedUsers: ImportedWorkspaceGithubUser[] = [];
+
+  for (const githubUsername of githubUsernames) {
+    let githubUser;
+
+    try {
+      githubUser = await getGithubUserByUsername(githubUsername);
+    } catch (error) {
+      if (error instanceof GithubApiError) {
+        throw new PlatformMutationError(
+          error.status === 404
+            ? `GitHub 用户 @${githubUsername} 不存在。`
+            : error.message,
+          error.status === 404 ? 404 : 502
+        );
+      }
+
+      throw error;
+    }
+
+    const [existingUser] = await database
+      .select({
+        id: schema.users.id,
+        githubUserId: schema.users.githubUserId,
+        displayName: schema.users.displayName,
+        avatarUrl: schema.users.avatarUrl,
+        bio: schema.users.bio
+      })
+      .from(schema.users)
+      .where(eq(schema.users.githubUsername, githubUser.githubUsername));
+
+    let userId = existingUser?.id;
+
+    if (!existingUser) {
+      const [createdUser] = await database
+        .insert(schema.users)
+        .values({
+          githubUsername: githubUser.githubUsername,
+          githubUserId: githubUser.githubUserId,
+          displayName: normalizeNullable(githubUser.displayName),
+          avatarUrl: normalizeNullable(githubUser.avatarUrl),
+          bio: normalizeNullable(githubUser.bio),
+          systemRole: 'member',
+          status: 'active',
+          emailLoginEnabled: false
+        })
+        .returning({ id: schema.users.id });
+
+      userId = createdUser.id;
+    } else {
+      const updates: {
+        githubUserId?: string;
+        displayName?: string | null;
+        avatarUrl?: string | null;
+        bio?: string | null;
+        updatedAt?: Date;
+      } = {};
+
+      if (!existingUser.githubUserId && githubUser.githubUserId) {
+        updates.githubUserId = githubUser.githubUserId;
+      }
+
+      if (!existingUser.displayName && githubUser.displayName) {
+        updates.displayName = githubUser.displayName;
+      }
+
+      if (!existingUser.avatarUrl && githubUser.avatarUrl) {
+        updates.avatarUrl = githubUser.avatarUrl;
+      }
+
+      if (!existingUser.bio && githubUser.bio) {
+        updates.bio = githubUser.bio;
+      }
+
+      if (Object.keys(updates).length) {
+        updates.updatedAt = new Date();
+
+        await database
+          .update(schema.users)
+          .set(updates)
+          .where(eq(schema.users.id, existingUser.id));
+      }
+    }
+
+    if (!userId) {
+      throw new PlatformMutationError('GitHub 用户导入失败，请稍后重试。', 500);
+    }
+
+    const [membership] = await database
+      .select({ userId: schema.workspaceMembers.userId })
+      .from(schema.workspaceMembers)
+      .where(
+        and(
+          eq(schema.workspaceMembers.workspaceId, input.workspaceId),
+          eq(schema.workspaceMembers.userId, userId)
+        )
+      );
+    const alreadyInWorkspace = Boolean(membership);
+
+    if (!membership) {
+      await ensureWorkspaceMember(input.workspaceId, userId);
+    }
+
+    importedUsers.push({
+      id: userId,
+      githubUsername: githubUser.githubUsername,
+      displayName: existingUser?.displayName || githubUser.displayName || null,
+      avatarUrl: existingUser?.avatarUrl || githubUser.avatarUrl || null,
+      alreadyInWorkspace
+    });
+  }
+
+  await recordAuditLog({
+    workspaceId: input.workspaceId,
+    actorId,
+    action: 'user.github_import',
+    entityType: 'user',
+    entityId: null,
+    summary: `从 GitHub 向工作区 ${workspace.name} 添加了 ${importedUsers.length} 位成员。`,
+    metadata: {
+      githubUsernames,
+      importedUserIds: importedUsers.map((user) => user.id)
+    }
+  });
+
+  return importedUsers;
 }
 
 export async function updateUser(

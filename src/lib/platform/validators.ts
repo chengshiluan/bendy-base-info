@@ -69,6 +69,19 @@ export const teamPayloadSchema = z.object({
   memberIds: z.array(z.string().min(1)).default([])
 });
 
+export const githubUserImportPayloadSchema = z.object({
+  workspaceId: z.string().min(1),
+  githubUsernames: z
+    .array(
+      trimmedString
+        .min(1)
+        .max(39)
+        .transform((value) => value.replace(/^@/, '').toLowerCase())
+    )
+    .min(1)
+    .max(20)
+});
+
 export const notificationPayloadSchema = z.object({
   workspaceId: nullableString,
   userId: nullableString,
