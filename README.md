@@ -163,6 +163,16 @@ npx drizzle-kit push --force
 
 数据库 Schema 位于 [src/lib/db/schema.ts](./src/lib/db/schema.ts)。
 
+从这一版开始，服务在第一次启动且检测到数据库连接后，也会自动执行一轮幂等初始化：
+
+- 缺失的基础表 / 字段会补齐
+- 缺失的权限、系统角色、角色权限绑定会自动回填
+- 已存在的数据不会重复初始化
+
+如果你需要在部署前手工执行同一套初始化逻辑，可以直接运行：
+
+- [docs/database-init.sql](./docs/database-init.sql)
+
 ### 4. 初始化管理员
 
 系统不开放注册，所以至少要先创建一个可以登录的后台管理员。
@@ -277,6 +287,12 @@ cp env.example.txt .env.local
 
 ```bash
 npm run db:push
+```
+
+如果是空库首启，应用启动时也会自动执行一轮幂等数据库初始化；若要手工预置，可执行：
+
+```bash
+psql "$DATABASE_URL" -f docs/database-init.sql
 ```
 
 ### 5. 录入管理员

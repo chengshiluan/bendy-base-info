@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/lib/db';
+import { getSystemRolePermissionCodes } from '@/lib/platform/rbac';
 
 export interface AuthUserSnapshot {
   id: string;
@@ -18,20 +19,7 @@ function wildcardPermissions(systemRole: AuthUserSnapshot['systemRole']) {
     return ['*'];
   }
 
-  if (systemRole === 'admin') {
-    return [
-      'dashboard.view',
-      'workspaces.view',
-      'teams.view',
-      'users.view',
-      'roles.view',
-      'permissions.view',
-      'notifications.view',
-      'tickets.view'
-    ];
-  }
-
-  return ['dashboard.view'];
+  return getSystemRolePermissionCodes(systemRole);
 }
 
 export async function findUserByGithubUsername(githubUsername: string) {

@@ -1,5 +1,6 @@
 -- Example bootstrap for the first admin account.
--- Run this after `npm run db:push`.
+-- Run this after the core schema / RBAC bootstrap has completed.
+-- You can rely on the automatic startup initializer or execute docs/database-init.sql manually.
 -- Replace the sample values before using it in a real project.
 
 with upsert_workspace as (

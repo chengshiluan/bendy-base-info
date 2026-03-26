@@ -1,4 +1,5 @@
 import { and, count, desc, eq, inArray } from 'drizzle-orm';
+import { ensureWorkspaceRbacInitialized } from '@/lib/db/bootstrap';
 import { db, schema } from '@/lib/db';
 import { slugify } from '@/lib/utils';
 import { recordAuditLog } from './audit';
@@ -501,6 +502,7 @@ export async function createWorkspace(
     userId: actorId,
     isOwner: true
   });
+  await ensureWorkspaceRbacInitialized([createdWorkspace.id]);
 
   await recordAuditLog({
     workspaceId: createdWorkspace.id,

@@ -10,6 +10,7 @@ import type {
   UserSummary,
   WorkspaceSummary
 } from './types';
+import { permissionSeeds, systemRoleSeeds } from './rbac';
 
 export const demoWorkspaces: WorkspaceSummary[] = [
   {
@@ -92,94 +93,27 @@ export const demoUsers: UserSummary[] = [
   }
 ];
 
-export const demoRoles: RoleSummary[] = [
-  {
-    id: 'role_super_admin',
-    workspaceId: 'ws_core',
-    key: 'super_admin',
-    name: '超级管理员',
-    description: '拥有全局配置、成员治理与发布权限。',
-    permissionCount: 6,
-    permissionIds: [
-      'perm_user_create',
-      'perm_user_update',
-      'perm_role_manage',
-      'perm_permission_manage',
-      'perm_team_manage',
-      'perm_ticket_assign'
-    ],
-    isSystem: true
-  },
-  {
-    id: 'role_operator',
-    workspaceId: 'ws_core',
-    key: 'operator',
-    name: '运营管理员',
-    description: '负责通知、工单与常规数据维护。',
-    permissionCount: 3,
-    permissionIds: ['perm_ticket_assign', 'perm_notification_publish'],
-    isSystem: false
-  }
-];
+export const demoRoles: RoleSummary[] = systemRoleSeeds.map((role) => ({
+  id: `role_${role.key}`,
+  workspaceId: 'ws_core',
+  key: role.key,
+  name: role.name,
+  description: role.description,
+  permissionCount: role.permissionCodes.length,
+  permissionIds: role.permissionCodes,
+  isSystem: true
+}));
 
-export const demoPermissions: PermissionSummary[] = [
-  {
-    id: 'perm_user_create',
-    module: 'users',
-    action: 'create',
-    code: 'users.create',
-    name: '创建用户',
-    description: '允许新增 GitHub 用户。'
-  },
-  {
-    id: 'perm_user_update',
-    module: 'users',
-    action: 'update',
-    code: 'users.update',
-    name: '编辑用户',
-    description: '允许编辑用户资料、状态和邮箱登录。'
-  },
-  {
-    id: 'perm_role_manage',
-    module: 'roles',
-    action: 'manage',
-    code: 'roles.manage',
-    name: '维护角色',
-    description: '允许创建和修改角色权限。'
-  },
-  {
-    id: 'perm_permission_manage',
-    module: 'permissions',
-    action: 'manage',
-    code: 'permissions.manage',
-    name: '维护权限',
-    description: '允许维护权限项。'
-  },
-  {
-    id: 'perm_team_manage',
-    module: 'teams',
-    action: 'manage',
-    code: 'teams.manage',
-    name: '维护团队',
-    description: '允许创建和修改团队与成员。'
-  },
-  {
-    id: 'perm_notification_publish',
-    module: 'notifications',
-    action: 'publish',
-    code: 'notifications.publish',
-    name: '发布站内消息',
-    description: '允许发布工作区消息。'
-  },
-  {
-    id: 'perm_ticket_assign',
-    module: 'tickets',
-    action: 'assign',
-    code: 'tickets.assign',
-    name: '分配工单',
-    description: '允许调整工单负责人。'
-  }
-];
+export const demoPermissions: PermissionSummary[] = permissionSeeds.map(
+  (permission) => ({
+    id: permission.code,
+    module: permission.module,
+    action: permission.action,
+    code: permission.code,
+    name: permission.name,
+    description: permission.description
+  })
+);
 
 export const demoNotifications: NotificationSummary[] = [
   {
