@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { requireManagerApi } from '@/lib/auth/api-guard';
 import {
+  getPaginationParams,
   getSearchParam,
   handlePlatformError,
   parseJsonRequest
 } from '@/lib/platform/api';
 import { createUser } from '@/lib/platform/mutations';
-import { listUsers } from '@/lib/platform/service';
+import { listUsersPage } from '@/lib/platform/service';
 import { userPayloadSchema } from '@/lib/platform/validators';
 
 export async function GET(request: Request) {
@@ -17,8 +18,16 @@ export async function GET(request: Request) {
     return response;
   }
 
-  const users = await listUsers(workspaceId);
-  return NextResponse.json({ users });
+  const { page, pageSize } = getPaginationParams(request);
+  const search = getSearchParam(request, 'search');
+  const { items, pagination } = await listUsersPage({
+    workspaceId,
+    search,
+    page,
+    pageSize
+  });
+
+  return NextResponse.json({ users: items, pagination });
 }
 
 export async function POST(request: Request) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { FileUploader } from '@/components/file-uploader';
 import { Badge } from '@/components/ui/badge';
@@ -49,14 +49,22 @@ import { formatBytes } from '@/lib/utils';
 import type {
   FileAssetSummary,
   OptionItem,
+  PaginationMeta,
   TicketCommentSummary,
   TicketSummary
 } from '@/lib/platform/types';
 import { ConfirmActionDialog } from './confirm-action-dialog';
-import { getErrorMessage, requestJson } from '../lib/client';
+import { ManagementPagination } from './management-pagination';
+import {
+  buildPathWithQuery,
+  getErrorMessage,
+  requestJson
+} from '../lib/client';
+import { getTicketPriorityLabel, getTicketStatusLabel } from '../lib/display';
 
 interface TicketsManagementClientProps {
   initialTickets: TicketSummary[];
+  initialPagination: PaginationMeta;
   workspaceId?: string;
   memberOptions: OptionItem[];
 }
@@ -94,15 +102,20 @@ function getTicketPayload(workspaceId: string, form: TicketFormState) {
 
 export function TicketsManagementClient({
   initialTickets,
+  initialPagination,
   workspaceId,
   memberOptions
 }: TicketsManagementClientProps) {
   const [tickets, setTickets] = useState(initialTickets);
-  const [search, setSearch] = useState('');
+  const [pagination, setPagination] = useState(initialPagination);
+  const [page, setPage] = useState(initialPagination.page);
+  const [searchDraft, setSearchDraft] = useState('');
+  const [searchKeyword, setSearchKeyword] = useState('');
   const [filter, setFilter] = useState<TicketFilter>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [listPending, setListPending] = useState(false);
   const [submitPending, setSubmitPending] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
   const [commentPending, setCommentPending] = useState(false);
@@ -122,36 +135,27 @@ export function TicketsManagementClient({
   const [commentBody, setCommentBody] = useState('');
   const [form, setForm] = useState<TicketFormState>(createDefaultForm());
 
-  const filteredTickets = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-
-    return tickets.filter((ticket) => {
-      const matchesFilter = filter === 'all' || ticket.status === filter;
-      const matchesKeyword =
-        !keyword ||
-        [
-          ticket.code,
-          ticket.title,
-          ticket.description,
-          ticket.assignee,
-          ticket.reporter
-        ]
-          .filter(Boolean)
-          .some((value) => value!.toLowerCase().includes(keyword));
-
-      return matchesFilter && matchesKeyword;
-    });
-  }, [filter, search, tickets]);
-
   async function refreshTickets() {
     if (!workspaceId) {
       return;
     }
 
-    const data = await requestJson<{ tickets: TicketSummary[] }>(
-      `/api/admin/tickets?workspaceId=${workspaceId}`
+    const data = await requestJson<{
+      tickets: TicketSummary[];
+      pagination: PaginationMeta;
+    }>(
+      buildPathWithQuery('/api/admin/tickets', {
+        workspaceId,
+        page,
+        search: searchKeyword,
+        filter
+      })
     );
     setTickets(data.tickets);
+    setPagination(data.pagination);
+    if (data.pagination.page !== page) {
+      setPage(data.pagination.page);
+    }
 
     if (selectedTicket) {
       const nextSelected = data.tickets.find(
@@ -160,6 +164,56 @@ export function TicketsManagementClient({
       setSelectedTicket(nextSelected ?? null);
     }
   }
+
+  useEffect(() => {
+    if (!workspaceId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadTickets() {
+      setListPending(true);
+
+      try {
+        const data = await requestJson<{
+          tickets: TicketSummary[];
+          pagination: PaginationMeta;
+        }>(
+          buildPathWithQuery('/api/admin/tickets', {
+            workspaceId,
+            page,
+            search: searchKeyword,
+            filter
+          })
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        setTickets(data.tickets);
+        setPagination(data.pagination);
+        if (data.pagination.page !== page) {
+          setPage(data.pagination.page);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(getErrorMessage(error));
+        }
+      } finally {
+        if (!cancelled) {
+          setListPending(false);
+        }
+      }
+    }
+
+    void loadTickets();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filter, page, searchKeyword, workspaceId]);
 
   async function loadTicketDetail(ticketId: string) {
     if (!workspaceId) {
@@ -249,6 +303,12 @@ export function TicketsManagementClient({
     } finally {
       setSubmitPending(false);
     }
+  }
+
+  function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSearchKeyword(searchDraft.trim());
+    setPage(1);
   }
 
   async function handleDelete() {
@@ -366,36 +426,64 @@ export function TicketsManagementClient({
     <>
       <Card>
         <CardHeader className='flex flex-col gap-4'>
-          <div className='flex flex-col gap-4 md:flex-row md:items-center md:justify-between'>
-            <div>
-              <CardTitle>工单列表</CardTitle>
-              <CardDescription>
-                工单负责承接需求、问题和内部协作，支持状态流转、评论和附件上传。
-              </CardDescription>
-            </div>
-            <Button onClick={openCreateDialog}>新建工单</Button>
+          <div>
+            <CardTitle>工单列表</CardTitle>
+            <CardDescription>
+              工单负责承接需求、问题和内部协作，支持状态流转、评论和附件上传。
+            </CardDescription>
           </div>
-          <div className='flex flex-col gap-3 md:flex-row md:items-center'>
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder='搜索工单号 / 标题 / 负责人 / 发起人'
-              className='md:w-80'
-            />
-            <div className='flex gap-2'>
-              {(
-                ['all', 'open', 'in_progress', 'resolved', 'closed'] as const
-              ).map((item) => (
-                <Button
-                  key={item}
-                  variant={filter === item ? 'default' : 'outline'}
-                  onClick={() => setFilter(item)}
+          <form
+            className='flex flex-nowrap items-center gap-3 overflow-x-auto pb-1'
+            onSubmit={handleSearchSubmit}
+          >
+            <div className='border-input bg-background focus-within:border-ring focus-within:ring-ring/50 flex min-w-[28rem] flex-1 items-center rounded-md border shadow-xs transition-[color,box-shadow] focus-within:ring-[3px] lg:min-w-[40rem]'>
+              <Input
+                value={searchDraft}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setSearchDraft(value);
+
+                  if (!value.trim()) {
+                    setSearchKeyword('');
+                    setPage(1);
+                  }
+                }}
+                placeholder='搜索工单号 / 标题 / 负责人 / 发起人，例如：TK-1002 / 数据库维护 / 平台管理员'
+                className='h-9 min-w-[18rem] flex-1 border-0 bg-transparent shadow-none focus-visible:border-transparent focus-visible:ring-0'
+              />
+              <Select
+                value={filter}
+                onValueChange={(value: TicketFilter) => {
+                  setFilter(value);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger
+                  aria-label='工单状态筛选'
+                  className='text-muted-foreground h-9 w-[8rem] shrink-0 rounded-none border-0 bg-transparent px-3 shadow-none focus-visible:border-transparent focus-visible:ring-0'
                 >
-                  {item === 'all' ? '全部' : item}
-                </Button>
-              ))}
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='all'>全部状态</SelectItem>
+                  <SelectItem value='open'>待处理</SelectItem>
+                  <SelectItem value='in_progress'>处理中</SelectItem>
+                  <SelectItem value='resolved'>已解决</SelectItem>
+                  <SelectItem value='closed'>已关闭</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </div>
+            <Button type='submit' variant='outline' className='shrink-0'>
+              搜索
+            </Button>
+            <Button
+              type='button'
+              className='shrink-0'
+              onClick={openCreateDialog}
+            >
+              新建工单
+            </Button>
+          </form>
         </CardHeader>
         <CardContent>
           <Table>
@@ -412,17 +500,21 @@ export function TicketsManagementClient({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredTickets.map((ticket) => (
+              {tickets.map((ticket) => (
                 <TableRow key={ticket.id}>
                   <TableCell className='font-medium'>{ticket.code}</TableCell>
                   <TableCell className='max-w-md whitespace-normal'>
                     {ticket.title}
                   </TableCell>
                   <TableCell>
-                    <Badge variant='outline'>{ticket.status}</Badge>
+                    <Badge variant='outline'>
+                      {getTicketStatusLabel(ticket.status)}
+                    </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant='outline'>{ticket.priority}</Badge>
+                    <Badge variant='outline'>
+                      {getTicketPriorityLabel(ticket.priority)}
+                    </Badge>
                   </TableCell>
                   <TableCell>{ticket.assignee}</TableCell>
                   <TableCell>{ticket.commentCount ?? 0}</TableCell>
@@ -457,7 +549,7 @@ export function TicketsManagementClient({
                   </TableCell>
                 </TableRow>
               ))}
-              {!filteredTickets.length && (
+              {!tickets.length && (
                 <TableRow>
                   <TableCell
                     colSpan={8}
@@ -469,6 +561,13 @@ export function TicketsManagementClient({
               )}
             </TableBody>
           </Table>
+          <div className='mt-4'>
+            <ManagementPagination
+              pagination={pagination}
+              pending={listPending}
+              onPageChange={setPage}
+            />
+          </div>
         </CardContent>
       </Card>
 
@@ -530,10 +629,10 @@ export function TicketsManagementClient({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='low'>low</SelectItem>
-                    <SelectItem value='medium'>medium</SelectItem>
-                    <SelectItem value='high'>high</SelectItem>
-                    <SelectItem value='urgent'>urgent</SelectItem>
+                    <SelectItem value='low'>低</SelectItem>
+                    <SelectItem value='medium'>中</SelectItem>
+                    <SelectItem value='high'>高</SelectItem>
+                    <SelectItem value='urgent'>紧急</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -549,10 +648,10 @@ export function TicketsManagementClient({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='open'>open</SelectItem>
-                    <SelectItem value='in_progress'>in_progress</SelectItem>
-                    <SelectItem value='resolved'>resolved</SelectItem>
-                    <SelectItem value='closed'>closed</SelectItem>
+                    <SelectItem value='open'>待处理</SelectItem>
+                    <SelectItem value='in_progress'>处理中</SelectItem>
+                    <SelectItem value='resolved'>已解决</SelectItem>
+                    <SelectItem value='closed'>已关闭</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -607,7 +706,7 @@ export function TicketsManagementClient({
             <SheetTitle>{selectedTicket?.title || '工单详情'}</SheetTitle>
             <SheetDescription>
               {selectedTicket
-                ? `${selectedTicket.code} · 状态 ${selectedTicket.status} · 优先级 ${selectedTicket.priority}`
+                ? `${selectedTicket.code} · 状态 ${getTicketStatusLabel(selectedTicket.status)} · 优先级 ${getTicketPriorityLabel(selectedTicket.priority)}`
                 : '查看工单详情、评论流和附件。'}
             </SheetDescription>
           </SheetHeader>
@@ -619,8 +718,12 @@ export function TicketsManagementClient({
                 </CardHeader>
                 <CardContent className='space-y-3 text-sm'>
                   <div className='flex flex-wrap gap-2'>
-                    <Badge variant='outline'>{selectedTicket.status}</Badge>
-                    <Badge variant='outline'>{selectedTicket.priority}</Badge>
+                    <Badge variant='outline'>
+                      {getTicketStatusLabel(selectedTicket.status)}
+                    </Badge>
+                    <Badge variant='outline'>
+                      {getTicketPriorityLabel(selectedTicket.priority)}
+                    </Badge>
                     <Badge variant='outline'>
                       负责人：{selectedTicket.assignee}
                     </Badge>

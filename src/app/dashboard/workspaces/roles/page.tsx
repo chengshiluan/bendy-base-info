@@ -2,7 +2,7 @@ import PageContainer from '@/components/layout/page-container';
 import { RolesManagementClient } from '@/features/management/components/roles-management-client';
 import { requireSession } from '@/lib/auth/session';
 import { getActiveWorkspaceCookie } from '@/lib/auth/workspace';
-import { listPermissionOptions, listRoles } from '@/lib/platform/service';
+import { listPermissionOptions, listRolesPage } from '@/lib/platform/service';
 
 export default async function RolesPage() {
   const session = await requireSession();
@@ -10,8 +10,8 @@ export default async function RolesPage() {
     (await getActiveWorkspaceCookie()) ||
     session.user.defaultWorkspaceId ||
     undefined;
-  const [roles, permissionOptions] = await Promise.all([
-    listRoles(activeWorkspaceId),
+  const [{ items, pagination }, permissionOptions] = await Promise.all([
+    listRolesPage({ workspaceId: activeWorkspaceId }),
     listPermissionOptions()
   ]);
 
@@ -21,7 +21,9 @@ export default async function RolesPage() {
       pageDescription='角色挂在工作区下，并通过权限集合控制页面与按钮访问。'
     >
       <RolesManagementClient
-        initialRoles={roles}
+        key={activeWorkspaceId ?? 'no-workspace'}
+        initialRoles={items}
+        initialPagination={pagination}
         workspaceId={activeWorkspaceId}
         permissionOptions={permissionOptions}
       />

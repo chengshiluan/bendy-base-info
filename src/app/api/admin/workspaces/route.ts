@@ -1,23 +1,39 @@
 import { NextResponse } from 'next/server';
 import { requireManagerApi, requireSuperAdminApi } from '@/lib/auth/api-guard';
-import { handlePlatformError, parseJsonRequest } from '@/lib/platform/api';
+import {
+  getPaginationParams,
+  getSearchParam,
+  handlePlatformError,
+  parseJsonRequest
+} from '@/lib/platform/api';
 import { createWorkspace } from '@/lib/platform/mutations';
-import { listWorkspaces } from '@/lib/platform/service';
+import {
+  getWorkspaceSummaryMetrics,
+  listWorkspacesPage
+} from '@/lib/platform/service';
 import { workspacePayloadSchema } from '@/lib/platform/validators';
 
-export async function GET() {
+export async function GET(request: Request) {
   const { session, response } = await requireManagerApi();
 
   if (response || !session) {
     return response;
   }
 
-  const workspaces = await listWorkspaces(
-    session.user.id,
-    session.user.systemRole
-  );
+  const { page, pageSize } = getPaginationParams(request);
+  const search = getSearchParam(request, 'search');
+  const [{ items, pagination }, summary] = await Promise.all([
+    listWorkspacesPage({
+      userId: session.user.id,
+      systemRole: session.user.systemRole,
+      search,
+      page,
+      pageSize
+    }),
+    getWorkspaceSummaryMetrics(session.user.id, session.user.systemRole)
+  ]);
 
-  return NextResponse.json({ workspaces });
+  return NextResponse.json({ workspaces: items, pagination, summary });
 }
 
 export async function POST(request: Request) {

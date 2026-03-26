@@ -3,7 +3,7 @@ import { NotificationsManagementClient } from '@/features/management/components/
 import { requireSession } from '@/lib/auth/session';
 import { getActiveWorkspaceCookie } from '@/lib/auth/workspace';
 import {
-  listAdminNotifications,
+  listAdminNotificationsPage,
   listWorkspaceMemberOptions
 } from '@/lib/platform/service';
 
@@ -13,8 +13,8 @@ export default async function WorkspaceNotificationsPage() {
     (await getActiveWorkspaceCookie()) ||
     session.user.defaultWorkspaceId ||
     undefined;
-  const [notifications, memberOptions] = await Promise.all([
-    listAdminNotifications(activeWorkspaceId),
+  const [{ items, pagination }, memberOptions] = await Promise.all([
+    listAdminNotificationsPage({ workspaceId: activeWorkspaceId }),
     listWorkspaceMemberOptions(activeWorkspaceId)
   ]);
 
@@ -24,7 +24,9 @@ export default async function WorkspaceNotificationsPage() {
       pageDescription='这里承载系统通知、运维提醒与重要变更提醒。'
     >
       <NotificationsManagementClient
-        initialNotifications={notifications}
+        key={activeWorkspaceId ?? 'no-workspace'}
+        initialNotifications={items}
+        initialPagination={pagination}
         workspaceId={activeWorkspaceId}
         memberOptions={memberOptions}
       />

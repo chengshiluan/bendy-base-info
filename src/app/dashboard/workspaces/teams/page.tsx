@@ -2,7 +2,10 @@ import PageContainer from '@/components/layout/page-container';
 import { TeamsManagementClient } from '@/features/management/components/teams-management-client';
 import { requireSession } from '@/lib/auth/session';
 import { getActiveWorkspaceCookie } from '@/lib/auth/workspace';
-import { listTeams, listWorkspaceMemberOptions } from '@/lib/platform/service';
+import {
+  listTeamsPage,
+  listWorkspaceMemberOptions
+} from '@/lib/platform/service';
 
 export default async function TeamsPage() {
   const session = await requireSession();
@@ -10,8 +13,8 @@ export default async function TeamsPage() {
     (await getActiveWorkspaceCookie()) ||
     session.user.defaultWorkspaceId ||
     undefined;
-  const [teams, memberOptions] = await Promise.all([
-    listTeams(activeWorkspaceId),
+  const [{ items, pagination }, memberOptions] = await Promise.all([
+    listTeamsPage({ workspaceId: activeWorkspaceId }),
     listWorkspaceMemberOptions(activeWorkspaceId)
   ]);
 
@@ -21,7 +24,9 @@ export default async function TeamsPage() {
       pageDescription='管理当前工作区下的团队分组、负责人和成员规模。'
     >
       <TeamsManagementClient
-        initialTeams={teams}
+        key={activeWorkspaceId ?? 'no-workspace'}
+        initialTeams={items}
+        initialPagination={pagination}
         workspaceId={activeWorkspaceId}
         memberOptions={memberOptions}
       />

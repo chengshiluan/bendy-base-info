@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,12 +28,19 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import type { PermissionSummary } from '@/lib/platform/types';
+import { useDebounce } from '@/hooks/use-debounce';
+import type { PaginationMeta, PermissionSummary } from '@/lib/platform/types';
 import { ConfirmActionDialog } from './confirm-action-dialog';
-import { getErrorMessage, requestJson } from '../lib/client';
+import { ManagementPagination } from './management-pagination';
+import {
+  buildPathWithQuery,
+  getErrorMessage,
+  requestJson
+} from '../lib/client';
 
 interface PermissionsManagementClientProps {
   initialPermissions: PermissionSummary[];
+  initialPagination: PaginationMeta;
 }
 
 type PermissionFormState = {
@@ -55,12 +62,17 @@ function createDefaultForm(): PermissionFormState {
 }
 
 export function PermissionsManagementClient({
-  initialPermissions
+  initialPermissions,
+  initialPagination
 }: PermissionsManagementClientProps) {
   const [permissions, setPermissions] = useState(initialPermissions);
+  const [pagination, setPagination] = useState(initialPagination);
+  const [page, setPage] = useState(initialPagination.page);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [listPending, setListPending] = useState(false);
   const [submitPending, setSubmitPending] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
   const [editingPermission, setEditingPermission] =
@@ -69,26 +81,66 @@ export function PermissionsManagementClient({
     useState<PermissionSummary | null>(null);
   const [form, setForm] = useState<PermissionFormState>(createDefaultForm());
 
-  const filteredPermissions = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-
-    if (!keyword) {
-      return permissions;
-    }
-
-    return permissions.filter((permission) =>
-      [permission.name, permission.code, permission.module, permission.action]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(keyword))
-    );
-  }, [permissions, search]);
-
   async function refreshPermissions() {
-    const data = await requestJson<{ permissions: PermissionSummary[] }>(
-      '/api/admin/permissions'
+    const data = await requestJson<{
+      permissions: PermissionSummary[];
+      pagination: PaginationMeta;
+    }>(
+      buildPathWithQuery('/api/admin/permissions', {
+        page,
+        search: debouncedSearch
+      })
     );
     setPermissions(data.permissions);
+    setPagination(data.pagination);
+    if (data.pagination.page !== page) {
+      setPage(data.pagination.page);
+    }
   }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPermissions() {
+      setListPending(true);
+
+      try {
+        const data = await requestJson<{
+          permissions: PermissionSummary[];
+          pagination: PaginationMeta;
+        }>(
+          buildPathWithQuery('/api/admin/permissions', {
+            page,
+            search: debouncedSearch
+          })
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        setPermissions(data.permissions);
+        setPagination(data.pagination);
+        if (data.pagination.page !== page) {
+          setPage(data.pagination.page);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(getErrorMessage(error));
+        }
+      } finally {
+        if (!cancelled) {
+          setListPending(false);
+        }
+      }
+    }
+
+    void loadPermissions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSearch, page]);
 
   function openCreateDialog() {
     setEditingPermission(null);
@@ -179,9 +231,12 @@ export function PermissionsManagementClient({
           <div className='flex w-full flex-col gap-3 md:w-auto md:flex-row'>
             <Input
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
               placeholder='搜索权限名 / 编码 / 模块 / 动作'
-              className='md:w-72'
+              className='md:w-80'
             />
             <Button onClick={openCreateDialog}>新增权限</Button>
           </div>
@@ -199,7 +254,7 @@ export function PermissionsManagementClient({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredPermissions.map((permission) => (
+              {permissions.map((permission) => (
                 <TableRow key={permission.id}>
                   <TableCell className='font-medium'>
                     {permission.name}
@@ -233,7 +288,7 @@ export function PermissionsManagementClient({
                   </TableCell>
                 </TableRow>
               ))}
-              {!filteredPermissions.length && (
+              {!permissions.length && (
                 <TableRow>
                   <TableCell
                     colSpan={6}
@@ -245,6 +300,13 @@ export function PermissionsManagementClient({
               )}
             </TableBody>
           </Table>
+          <div className='mt-4'>
+            <ManagementPagination
+              pagination={pagination}
+              pending={listPending}
+              onPageChange={setPage}
+            />
+          </div>
         </CardContent>
       </Card>
 

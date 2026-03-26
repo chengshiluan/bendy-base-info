@@ -2,7 +2,7 @@ import PageContainer from '@/components/layout/page-container';
 import { UsersManagementClient } from '@/features/management/components/users-management-client';
 import { requireSession } from '@/lib/auth/session';
 import { getActiveWorkspaceCookie } from '@/lib/auth/workspace';
-import { listUsers } from '@/lib/platform/service';
+import { listUsersPage } from '@/lib/platform/service';
 
 export default async function UsersPage() {
   const session = await requireSession();
@@ -10,7 +10,9 @@ export default async function UsersPage() {
     (await getActiveWorkspaceCookie()) ||
     session.user.defaultWorkspaceId ||
     undefined;
-  const users = await listUsers(activeWorkspaceId);
+  const { items, pagination } = await listUsersPage({
+    workspaceId: activeWorkspaceId
+  });
 
   return (
     <PageContainer
@@ -18,7 +20,9 @@ export default async function UsersPage() {
       pageDescription='系统用户以 GitHub 用户名为唯一主键，可通过邮箱验证码辅助登录。'
     >
       <UsersManagementClient
-        initialUsers={users}
+        key={activeWorkspaceId ?? 'no-workspace'}
+        initialUsers={items}
+        initialPagination={pagination}
         workspaceId={activeWorkspaceId}
       />
     </PageContainer>

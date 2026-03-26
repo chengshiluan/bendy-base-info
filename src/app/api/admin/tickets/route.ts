@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { requireManagerApi } from '@/lib/auth/api-guard';
 import {
+  getPaginationParams,
   getSearchParam,
   handlePlatformError,
   parseJsonRequest
 } from '@/lib/platform/api';
 import { createTicket } from '@/lib/platform/mutations';
-import { listTickets } from '@/lib/platform/service';
+import { listTicketsPage } from '@/lib/platform/service';
 import { ticketPayloadSchema } from '@/lib/platform/validators';
 
 export async function GET(request: Request) {
@@ -17,8 +18,24 @@ export async function GET(request: Request) {
     return response;
   }
 
-  const tickets = await listTickets(workspaceId);
-  return NextResponse.json({ tickets });
+  const { page, pageSize } = getPaginationParams(request);
+  const search = getSearchParam(request, 'search');
+  const filter = getSearchParam(request, 'filter') as
+    | 'all'
+    | 'open'
+    | 'in_progress'
+    | 'resolved'
+    | 'closed'
+    | undefined;
+  const { items, pagination } = await listTicketsPage({
+    workspaceId,
+    search,
+    filter,
+    page,
+    pageSize
+  });
+
+  return NextResponse.json({ tickets: items, pagination });
 }
 
 export async function POST(request: Request) {

@@ -3,7 +3,7 @@ import { TicketsManagementClient } from '@/features/management/components/ticket
 import { requireSession } from '@/lib/auth/session';
 import { getActiveWorkspaceCookie } from '@/lib/auth/workspace';
 import {
-  listTickets,
+  listTicketsPage,
   listWorkspaceMemberOptions
 } from '@/lib/platform/service';
 
@@ -13,8 +13,8 @@ export default async function WorkspaceTicketsPage() {
     (await getActiveWorkspaceCookie()) ||
     session.user.defaultWorkspaceId ||
     undefined;
-  const [tickets, memberOptions] = await Promise.all([
-    listTickets(activeWorkspaceId),
+  const [{ items, pagination }, memberOptions] = await Promise.all([
+    listTicketsPage({ workspaceId: activeWorkspaceId }),
     listWorkspaceMemberOptions(activeWorkspaceId)
   ]);
 
@@ -24,7 +24,9 @@ export default async function WorkspaceTicketsPage() {
       pageDescription='工单用于承接日常问题、需求跟踪与内部协作。'
     >
       <TicketsManagementClient
-        initialTickets={tickets}
+        key={activeWorkspaceId ?? 'no-workspace'}
+        initialTickets={items}
+        initialPagination={pagination}
         workspaceId={activeWorkspaceId}
         memberOptions={memberOptions}
       />

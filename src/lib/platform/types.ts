@@ -135,3 +135,15 @@ export interface ImportedWorkspaceGithubUser {
   avatarUrl: string | null;
   alreadyInWorkspace: boolean;
 }
+
+export interface PaginationMeta {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface PaginatedResult<T> {
+  items: T[];
+  pagination: PaginationMeta;
+}

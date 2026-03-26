@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,12 +28,23 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import type { NotificationSummary, OptionItem } from '@/lib/platform/types';
+import type {
+  NotificationSummary,
+  OptionItem,
+  PaginationMeta
+} from '@/lib/platform/types';
 import { ConfirmActionDialog } from './confirm-action-dialog';
-import { getErrorMessage, requestJson } from '../lib/client';
+import { ManagementPagination } from './management-pagination';
+import {
+  buildPathWithQuery,
+  getErrorMessage,
+  requestJson
+} from '../lib/client';
+import { getNotificationLevelLabel } from '../lib/display';
 
 interface NotificationsManagementClientProps {
   initialNotifications: NotificationSummary[];
+  initialPagination: PaginationMeta;
   workspaceId?: string;
   memberOptions: OptionItem[];
 }
@@ -61,15 +72,19 @@ function createDefaultForm(): NotificationFormState {
 
 export function NotificationsManagementClient({
   initialNotifications,
+  initialPagination,
   workspaceId,
   memberOptions
 }: NotificationsManagementClientProps) {
   const [notifications, setNotifications] = useState(initialNotifications);
+  const [pagination, setPagination] = useState(initialPagination);
+  const [page, setPage] = useState(initialPagination.page);
   const [searchDraft, setSearchDraft] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [filter, setFilter] = useState<NotificationFilter>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [listPending, setListPending] = useState(false);
   const [submitPending, setSubmitPending] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
   const [editingNotification, setEditingNotification] =
@@ -78,33 +93,70 @@ export function NotificationsManagementClient({
     useState<NotificationSummary | null>(null);
   const [form, setForm] = useState<NotificationFormState>(createDefaultForm());
 
-  const filteredNotifications = useMemo(() => {
-    const keyword = searchKeyword.trim().toLowerCase();
-
-    return notifications.filter((notification) => {
-      const matchesFilter =
-        filter === 'all' ||
-        (filter === 'read' ? notification.isRead : !notification.isRead);
-      const matchesKeyword =
-        !keyword ||
-        [notification.title, notification.content, notification.targetLabel]
-          .filter(Boolean)
-          .some((value) => value!.toLowerCase().includes(keyword));
-
-      return matchesFilter && matchesKeyword;
-    });
-  }, [filter, notifications, searchKeyword]);
-
   async function refreshNotifications() {
-    if (!workspaceId) {
-      return;
-    }
-
-    const data = await requestJson<{ notifications: NotificationSummary[] }>(
-      `/api/admin/notifications?workspaceId=${workspaceId}`
+    const data = await requestJson<{
+      notifications: NotificationSummary[];
+      pagination: PaginationMeta;
+    }>(
+      buildPathWithQuery('/api/admin/notifications', {
+        workspaceId,
+        page,
+        search: searchKeyword,
+        filter
+      })
     );
     setNotifications(data.notifications);
+    setPagination(data.pagination);
+    if (data.pagination.page !== page) {
+      setPage(data.pagination.page);
+    }
   }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadNotifications() {
+      setListPending(true);
+
+      try {
+        const data = await requestJson<{
+          notifications: NotificationSummary[];
+          pagination: PaginationMeta;
+        }>(
+          buildPathWithQuery('/api/admin/notifications', {
+            workspaceId,
+            page,
+            search: searchKeyword,
+            filter
+          })
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        setNotifications(data.notifications);
+        setPagination(data.pagination);
+        if (data.pagination.page !== page) {
+          setPage(data.pagination.page);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(getErrorMessage(error));
+        }
+      } finally {
+        if (!cancelled) {
+          setListPending(false);
+        }
+      }
+    }
+
+    void loadNotifications();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filter, page, searchKeyword, workspaceId]);
 
   function openCreateDialog() {
     setEditingNotification(null);
@@ -133,6 +185,7 @@ export function NotificationsManagementClient({
   function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSearchKeyword(searchDraft.trim());
+    setPage(1);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -236,7 +289,7 @@ export function NotificationsManagementClient({
             className='flex flex-col gap-3 lg:flex-row lg:items-center'
             onSubmit={handleSearchSubmit}
           >
-            <div className='border-input bg-background focus-within:border-ring focus-within:ring-ring/50 flex w-full min-w-0 items-center rounded-md border shadow-xs transition-[color,box-shadow] focus-within:ring-[3px] lg:max-w-xl'>
+            <div className='border-input bg-background focus-within:border-ring focus-within:ring-ring/50 flex w-full min-w-[24rem] flex-1 items-center rounded-md border shadow-xs transition-[color,box-shadow] focus-within:ring-[3px] lg:max-w-4xl lg:min-w-[38rem]'>
               <Input
                 value={searchDraft}
                 onChange={(event) => {
@@ -245,14 +298,18 @@ export function NotificationsManagementClient({
 
                   if (!value.trim()) {
                     setSearchKeyword('');
+                    setPage(1);
                   }
                 }}
-                placeholder='搜索标题 / 内容 / 目标对象'
-                className='h-9 border-0 bg-transparent shadow-none focus-visible:border-transparent focus-visible:ring-0'
+                placeholder='搜索标题 / 内容 / 目标对象，例如：数据库维护窗口提醒 / 指定成员 / 当前工作区广播'
+                className='h-9 min-w-[18rem] flex-1 border-0 bg-transparent shadow-none focus-visible:border-transparent focus-visible:ring-0'
               />
               <Select
                 value={filter}
-                onValueChange={(value: NotificationFilter) => setFilter(value)}
+                onValueChange={(value: NotificationFilter) => {
+                  setFilter(value);
+                  setPage(1);
+                }}
               >
                 <SelectTrigger
                   aria-label='通知状态筛选'
@@ -280,7 +337,7 @@ export function NotificationsManagementClient({
           </form>
         </CardHeader>
         <CardContent className='space-y-4'>
-          {filteredNotifications.map((notification) => (
+          {notifications.map((notification) => (
             <Card key={notification.id} className='border-dashed'>
               <CardHeader>
                 <div className='flex flex-col gap-3 md:flex-row md:items-start md:justify-between'>
@@ -294,7 +351,9 @@ export function NotificationsManagementClient({
                     </CardDescription>
                   </div>
                   <div className='flex flex-wrap items-center gap-2'>
-                    <Badge variant='outline'>{notification.level}</Badge>
+                    <Badge variant='outline'>
+                      {getNotificationLevelLabel(notification.level)}
+                    </Badge>
                     <Badge
                       variant={notification.isRead ? 'secondary' : 'default'}
                     >
@@ -338,11 +397,16 @@ export function NotificationsManagementClient({
               </CardContent>
             </Card>
           ))}
-          {!filteredNotifications.length && (
+          {!notifications.length && (
             <div className='text-muted-foreground rounded-md border border-dashed py-10 text-center text-sm'>
               当前没有匹配的通知记录。
             </div>
           )}
+          <ManagementPagination
+            pagination={pagination}
+            pending={listPending}
+            onPageChange={setPage}
+          />
         </CardContent>
       </Card>
 
@@ -393,10 +457,10 @@ export function NotificationsManagementClient({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='info'>info</SelectItem>
-                    <SelectItem value='success'>success</SelectItem>
-                    <SelectItem value='warning'>warning</SelectItem>
-                    <SelectItem value='error'>error</SelectItem>
+                    <SelectItem value='info'>普通</SelectItem>
+                    <SelectItem value='success'>成功</SelectItem>
+                    <SelectItem value='warning'>警告</SelectItem>
+                    <SelectItem value='error'>紧急</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

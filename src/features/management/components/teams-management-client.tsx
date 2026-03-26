@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -37,18 +37,26 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import { useDebounce } from '@/hooks/use-debounce';
 import type {
   ImportedWorkspaceGithubUser,
   OptionItem,
+  PaginationMeta,
   TeamSummary
 } from '@/lib/platform/types';
 import { ConfirmActionDialog } from './confirm-action-dialog';
+import { ManagementPagination } from './management-pagination';
 import { OptionCheckboxGroup } from './option-checkbox-group';
 import { TeamGithubMemberPickerDialog } from './team-github-member-picker-dialog';
-import { getErrorMessage, requestJson } from '../lib/client';
+import {
+  buildPathWithQuery,
+  getErrorMessage,
+  requestJson
+} from '../lib/client';
 
 interface TeamsManagementClientProps {
   initialTeams: TeamSummary[];
+  initialPagination: PaginationMeta;
   workspaceId?: string;
   memberOptions: OptionItem[];
 }
@@ -98,7 +106,10 @@ function mergeMemberOptions(
   );
 }
 
-function mergeMemberIds(currentIds: string[], importedUsers: ImportedWorkspaceGithubUser[]) {
+function mergeMemberIds(
+  currentIds: string[],
+  importedUsers: ImportedWorkspaceGithubUser[]
+) {
   return Array.from(
     new Set([...currentIds, ...importedUsers.map((user) => user.id)])
   );
@@ -106,46 +117,97 @@ function mergeMemberIds(currentIds: string[], importedUsers: ImportedWorkspaceGi
 
 export function TeamsManagementClient({
   initialTeams,
+  initialPagination,
   workspaceId,
   memberOptions
 }: TeamsManagementClientProps) {
   const [teams, setTeams] = useState(initialTeams);
+  const [pagination, setPagination] = useState(initialPagination);
+  const [page, setPage] = useState(initialPagination.page);
   const [availableMemberOptions, setAvailableMemberOptions] =
     useState(memberOptions);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [githubPickerOpen, setGithubPickerOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [listPending, setListPending] = useState(false);
   const [submitPending, setSubmitPending] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
   const [editingTeam, setEditingTeam] = useState<TeamSummary | null>(null);
   const [deletingTeam, setDeletingTeam] = useState<TeamSummary | null>(null);
   const [form, setForm] = useState<TeamFormState>(createDefaultForm());
 
-  const filteredTeams = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-
-    if (!keyword) {
-      return teams;
-    }
-
-    return teams.filter((team) =>
-      [team.name, team.slug, team.description, team.lead]
-        .filter((value): value is string => Boolean(value))
-        .some((value) => value.toLowerCase().includes(keyword))
-    );
-  }, [search, teams]);
-
   async function refreshTeams() {
     if (!workspaceId) {
       return;
     }
 
-    const data = await requestJson<{ teams: TeamSummary[] }>(
-      `/api/admin/teams?workspaceId=${workspaceId}`
+    const data = await requestJson<{
+      teams: TeamSummary[];
+      pagination: PaginationMeta;
+    }>(
+      buildPathWithQuery('/api/admin/teams', {
+        workspaceId,
+        page,
+        search: debouncedSearch
+      })
     );
     setTeams(data.teams);
+    setPagination(data.pagination);
+    if (data.pagination.page !== page) {
+      setPage(data.pagination.page);
+    }
   }
+
+  useEffect(() => {
+    if (!workspaceId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadTeams() {
+      setListPending(true);
+
+      try {
+        const data = await requestJson<{
+          teams: TeamSummary[];
+          pagination: PaginationMeta;
+        }>(
+          buildPathWithQuery('/api/admin/teams', {
+            workspaceId,
+            page,
+            search: debouncedSearch
+          })
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        setTeams(data.teams);
+        setPagination(data.pagination);
+        if (data.pagination.page !== page) {
+          setPage(data.pagination.page);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(getErrorMessage(error));
+        }
+      } finally {
+        if (!cancelled) {
+          setListPending(false);
+        }
+      }
+    }
+
+    void loadTeams();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSearch, page, workspaceId]);
 
   function openCreateDialog() {
     setEditingTeam(null);
@@ -167,7 +229,9 @@ export function TeamsManagementClient({
     setDialogOpen(true);
   }
 
-  function handleGithubMembersImported(importedUsers: ImportedWorkspaceGithubUser[]) {
+  function handleGithubMembersImported(
+    importedUsers: ImportedWorkspaceGithubUser[]
+  ) {
     setAvailableMemberOptions((current) =>
       mergeMemberOptions(current, importedUsers)
     );
@@ -271,9 +335,12 @@ export function TeamsManagementClient({
           <div className='flex w-full flex-col gap-3 md:w-auto md:flex-row'>
             <Input
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
               placeholder='搜索团队名 / 标识 / 负责人'
-              className='md:w-72'
+              className='md:w-80'
             />
             <Button onClick={openCreateDialog}>新增团队</Button>
           </div>
@@ -291,7 +358,7 @@ export function TeamsManagementClient({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredTeams.map((team) => (
+              {teams.map((team) => (
                 <TableRow key={team.id}>
                   <TableCell className='font-medium'>{team.name}</TableCell>
                   <TableCell>{team.slug || '-'}</TableCell>
@@ -325,7 +392,7 @@ export function TeamsManagementClient({
                   </TableCell>
                 </TableRow>
               ))}
-              {!filteredTeams.length && (
+              {!teams.length && (
                 <TableRow>
                   <TableCell
                     colSpan={6}
@@ -337,6 +404,13 @@ export function TeamsManagementClient({
               )}
             </TableBody>
           </Table>
+          <div className='mt-4'>
+            <ManagementPagination
+              pagination={pagination}
+              pending={listPending}
+              onPageChange={setPage}
+            />
+          </div>
         </CardContent>
       </Card>
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   DndContext,
   DragEndEvent,
@@ -24,6 +24,7 @@ import {
 import { Input } from '@/components/ui/input';
 import type { TicketSummary } from '@/lib/platform/types';
 import { getErrorMessage, requestJson } from '../lib/client';
+import { getTicketPriorityLabel, getTicketStatusLabel } from '../lib/display';
 
 interface TicketKanbanClientProps {
   initialTickets: TicketSummary[];
@@ -75,7 +76,9 @@ function TicketCard({ ticket }: TicketCardProps) {
     >
       <div className='mb-3 flex items-center justify-between gap-2'>
         <p className='text-sm font-semibold'>{ticket.code}</p>
-        <Badge variant='outline'>{ticket.priority}</Badge>
+        <Badge variant='outline'>
+          {getTicketPriorityLabel(ticket.priority)}
+        </Badge>
       </div>
       <p className='mb-3 text-sm leading-6 font-medium'>{ticket.title}</p>
       <div className='text-muted-foreground flex flex-wrap gap-2 text-xs'>
@@ -133,6 +136,11 @@ export function TicketKanbanClient({
   const [tickets, setTickets] = useState(initialTickets);
   const [search, setSearch] = useState('');
   const sensors = useSensors(useSensor(PointerSensor));
+
+  useEffect(() => {
+    setTickets(initialTickets);
+    setSearch('');
+  }, [initialTickets]);
 
   const filteredTickets = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -201,7 +209,9 @@ export function TicketKanbanClient({
           assigneeId: ticket.assigneeId ?? null
         })
       });
-      toast.success(`工单 ${ticket.code} 已移动到 ${nextStatus}。`);
+      toast.success(
+        `工单 ${ticket.code} 已移动到 ${getTicketStatusLabel(nextStatus)}。`
+      );
       await refreshTickets();
     } catch (error) {
       setTickets(previousTickets);

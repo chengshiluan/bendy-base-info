@@ -1,19 +1,31 @@
 import { NextResponse } from 'next/server';
 import { requireManagerApi } from '@/lib/auth/api-guard';
-import { handlePlatformError, parseJsonRequest } from '@/lib/platform/api';
+import {
+  getPaginationParams,
+  getSearchParam,
+  handlePlatformError,
+  parseJsonRequest
+} from '@/lib/platform/api';
 import { createPermission } from '@/lib/platform/mutations';
-import { listPermissions } from '@/lib/platform/service';
+import { listPermissionsPage } from '@/lib/platform/service';
 import { permissionPayloadSchema } from '@/lib/platform/validators';
 
-export async function GET() {
+export async function GET(request: Request) {
   const { response } = await requireManagerApi();
 
   if (response) {
     return response;
   }
 
-  const permissions = await listPermissions();
-  return NextResponse.json({ permissions });
+  const { page, pageSize } = getPaginationParams(request);
+  const search = getSearchParam(request, 'search');
+  const { items, pagination } = await listPermissionsPage({
+    search,
+    page,
+    pageSize
+  });
+
+  return NextResponse.json({ permissions: items, pagination });
 }
 
 export async function POST(request: Request) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -37,14 +37,28 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import type { WorkspaceSummary } from '@/lib/platform/types';
+import { useDebounce } from '@/hooks/use-debounce';
+import type { PaginationMeta, WorkspaceSummary } from '@/lib/platform/types';
 import { ConfirmActionDialog } from './confirm-action-dialog';
-import { getErrorMessage, requestJson } from '../lib/client';
+import { ManagementPagination } from './management-pagination';
+import {
+  buildPathWithQuery,
+  getErrorMessage,
+  requestJson
+} from '../lib/client';
 
 interface WorkspacesManagementClientProps {
   initialWorkspaces: WorkspaceSummary[];
+  initialPagination: PaginationMeta;
+  initialMetrics: WorkspaceMetrics;
   canManage: boolean;
 }
+
+type WorkspaceMetrics = {
+  total: number;
+  active: number;
+  archived: number;
+};
 
 type WorkspaceFormState = {
   name: string;
@@ -66,13 +80,20 @@ function createDefaultForm(): WorkspaceFormState {
 
 export function WorkspacesManagementClient({
   initialWorkspaces,
+  initialPagination,
+  initialMetrics,
   canManage
 }: WorkspacesManagementClientProps) {
   const router = useRouter();
   const [workspaces, setWorkspaces] = useState(initialWorkspaces);
+  const [pagination, setPagination] = useState(initialPagination);
+  const [page, setPage] = useState(initialPagination.page);
+  const [metrics, setMetrics] = useState(initialMetrics);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [listPending, setListPending] = useState(false);
   const [submitPending, setSubmitPending] = useState(false);
   const [archivePending, setArchivePending] = useState(false);
   const [editingWorkspace, setEditingWorkspace] =
@@ -81,37 +102,70 @@ export function WorkspacesManagementClient({
     useState<WorkspaceSummary | null>(null);
   const [form, setForm] = useState<WorkspaceFormState>(createDefaultForm());
 
-  const metrics = useMemo(() => {
-    return {
-      total: workspaces.length,
-      active: workspaces.filter((workspace) => workspace.status === 'active')
-        .length,
-      archived: workspaces.filter(
-        (workspace) => workspace.status === 'archived'
-      ).length
-    };
-  }, [workspaces]);
-
-  const filteredWorkspaces = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-
-    if (!keyword) {
-      return workspaces;
-    }
-
-    return workspaces.filter((workspace) =>
-      [workspace.name, workspace.slug, workspace.description]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(keyword))
-    );
-  }, [search, workspaces]);
-
   async function refreshWorkspaces() {
-    const data = await requestJson<{ workspaces: WorkspaceSummary[] }>(
-      '/api/admin/workspaces'
+    const data = await requestJson<{
+      workspaces: WorkspaceSummary[];
+      pagination: PaginationMeta;
+      summary: WorkspaceMetrics;
+    }>(
+      buildPathWithQuery('/api/admin/workspaces', {
+        page,
+        search: debouncedSearch
+      })
     );
     setWorkspaces(data.workspaces);
+    setPagination(data.pagination);
+    setMetrics(data.summary);
+    if (data.pagination.page !== page) {
+      setPage(data.pagination.page);
+    }
   }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWorkspaces() {
+      setListPending(true);
+
+      try {
+        const data = await requestJson<{
+          workspaces: WorkspaceSummary[];
+          pagination: PaginationMeta;
+          summary: WorkspaceMetrics;
+        }>(
+          buildPathWithQuery('/api/admin/workspaces', {
+            page,
+            search: debouncedSearch
+          })
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        setWorkspaces(data.workspaces);
+        setPagination(data.pagination);
+        setMetrics(data.summary);
+        if (data.pagination.page !== page) {
+          setPage(data.pagination.page);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(getErrorMessage(error));
+        }
+      } finally {
+        if (!cancelled) {
+          setListPending(false);
+        }
+      }
+    }
+
+    void loadWorkspaces();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSearch, page]);
 
   function openCreateDialog() {
     setEditingWorkspace(null);
@@ -231,7 +285,10 @@ export function WorkspacesManagementClient({
           <div className='flex w-full flex-col gap-3 md:w-auto md:flex-row'>
             <Input
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
               placeholder='搜索工作区名称 / 标识 / 说明'
               className='md:w-80'
             />
@@ -254,7 +311,7 @@ export function WorkspacesManagementClient({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredWorkspaces.map((workspace) => (
+              {workspaces.map((workspace) => (
                 <TableRow key={workspace.id}>
                   <TableCell>
                     <div className='flex flex-wrap items-center gap-2'>
@@ -308,7 +365,7 @@ export function WorkspacesManagementClient({
                   ) : null}
                 </TableRow>
               ))}
-              {!filteredWorkspaces.length ? (
+              {!workspaces.length ? (
                 <TableRow>
                   <TableCell
                     colSpan={tableColumns}
@@ -320,6 +377,13 @@ export function WorkspacesManagementClient({
               ) : null}
             </TableBody>
           </Table>
+          <div className='mt-4'>
+            <ManagementPagination
+              pagination={pagination}
+              pending={listPending}
+              onPageChange={setPage}
+            />
+          </div>
         </CardContent>
       </Card>
 

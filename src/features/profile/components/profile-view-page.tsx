@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/card';
 import { UserAvatarProfile } from '@/components/user-avatar-profile';
 import { useSession } from 'next-auth/react';
+import { getSystemRoleLabel } from '@/features/management/lib/display';
 
 export default function ProfileViewPage() {
   const { data } = useSession();
@@ -32,7 +33,9 @@ export default function ProfileViewPage() {
         <CardContent className='flex flex-col gap-4 md:flex-row md:items-center md:justify-between'>
           <UserAvatarProfile className='h-16 w-16' showInfo user={user} />
           <div className='flex flex-wrap gap-2'>
-            <Badge variant='outline'>{user.systemRole}</Badge>
+            <Badge variant='outline'>
+              {getSystemRoleLabel(user.systemRole)}
+            </Badge>
             {user.defaultWorkspaceId && (
               <Badge variant='secondary'>默认工作区已设置</Badge>
             )}

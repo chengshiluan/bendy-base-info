@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,12 +36,20 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
-import type { UserSummary } from '@/lib/platform/types';
+import { useDebounce } from '@/hooks/use-debounce';
+import type { PaginationMeta, UserSummary } from '@/lib/platform/types';
 import { ConfirmActionDialog } from './confirm-action-dialog';
-import { getErrorMessage, requestJson } from '../lib/client';
+import { ManagementPagination } from './management-pagination';
+import {
+  buildPathWithQuery,
+  getErrorMessage,
+  requestJson
+} from '../lib/client';
+import { getSystemRoleLabel, getUserStatusLabel } from '../lib/display';
 
 interface UsersManagementClientProps {
   initialUsers: UserSummary[];
+  initialPagination: PaginationMeta;
   workspaceId?: string;
 }
 
@@ -65,57 +73,95 @@ function createDefaultForm(): UserFormState {
   };
 }
 
-function getStatusLabel(status: UserSummary['status']) {
-  switch (status) {
-    case 'active':
-      return '启用中';
-    case 'invited':
-      return '待激活';
-    case 'disabled':
-      return '已停用';
-    default:
-      return status;
-  }
-}
-
 export function UsersManagementClient({
   initialUsers,
+  initialPagination,
   workspaceId
 }: UsersManagementClientProps) {
   const [users, setUsers] = useState(initialUsers);
+  const [pagination, setPagination] = useState(initialPagination);
+  const [page, setPage] = useState(initialPagination.page);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [listPending, setListPending] = useState(false);
   const [submitPending, setSubmitPending] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
   const [editingUser, setEditingUser] = useState<UserSummary | null>(null);
   const [deletingUser, setDeletingUser] = useState<UserSummary | null>(null);
   const [form, setForm] = useState<UserFormState>(createDefaultForm());
 
-  const filteredUsers = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-
-    if (!keyword) {
-      return users;
-    }
-
-    return users.filter((user) =>
-      [user.githubUsername, user.displayName, user.email]
-        .filter(Boolean)
-        .some((value) => value!.toLowerCase().includes(keyword))
-    );
-  }, [search, users]);
-
   async function refreshUsers() {
     if (!workspaceId) {
       return;
     }
 
-    const data = await requestJson<{ users: UserSummary[] }>(
-      `/api/admin/users?workspaceId=${workspaceId}`
+    const data = await requestJson<{
+      users: UserSummary[];
+      pagination: PaginationMeta;
+    }>(
+      buildPathWithQuery('/api/admin/users', {
+        workspaceId,
+        page,
+        search: debouncedSearch
+      })
     );
     setUsers(data.users);
+    setPagination(data.pagination);
+    if (data.pagination.page !== page) {
+      setPage(data.pagination.page);
+    }
   }
+
+  useEffect(() => {
+    if (!workspaceId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadUsers() {
+      setListPending(true);
+
+      try {
+        const data = await requestJson<{
+          users: UserSummary[];
+          pagination: PaginationMeta;
+        }>(
+          buildPathWithQuery('/api/admin/users', {
+            workspaceId,
+            page,
+            search: debouncedSearch
+          })
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        setUsers(data.users);
+        setPagination(data.pagination);
+        if (data.pagination.page !== page) {
+          setPage(data.pagination.page);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(getErrorMessage(error));
+        }
+      } finally {
+        if (!cancelled) {
+          setListPending(false);
+        }
+      }
+    }
+
+    void loadUsers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSearch, page, workspaceId]);
 
   function openCreateDialog() {
     setEditingUser(null);
@@ -228,9 +274,12 @@ export function UsersManagementClient({
           <div className='flex w-full flex-col gap-3 md:w-auto md:flex-row'>
             <Input
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
               placeholder='搜索 GitHub 用户名 / 显示名 / 邮箱'
-              className='md:w-72'
+              className='md:w-80'
             />
             <Button onClick={openCreateDialog}>新增用户</Button>
           </div>
@@ -249,7 +298,7 @@ export function UsersManagementClient({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredUsers.map((user) => (
+              {users.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell className='font-medium'>
                     @{user.githubUsername}
@@ -257,11 +306,13 @@ export function UsersManagementClient({
                   <TableCell>{user.displayName || '-'}</TableCell>
                   <TableCell>{user.email || '-'}</TableCell>
                   <TableCell>
-                    <Badge variant='outline'>{user.systemRole}</Badge>
+                    <Badge variant='outline'>
+                      {getSystemRoleLabel(user.systemRole)}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <Badge variant='outline'>
-                      {getStatusLabel(user.status)}
+                      {getUserStatusLabel(user.status)}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -294,7 +345,7 @@ export function UsersManagementClient({
                   </TableCell>
                 </TableRow>
               ))}
-              {!filteredUsers.length && (
+              {!users.length && (
                 <TableRow>
                   <TableCell
                     colSpan={7}
@@ -306,6 +357,13 @@ export function UsersManagementClient({
               )}
             </TableBody>
           </Table>
+          <div className='mt-4'>
+            <ManagementPagination
+              pagination={pagination}
+              pending={listPending}
+              onPageChange={setPage}
+            />
+          </div>
         </CardContent>
       </Card>
 
@@ -384,9 +442,9 @@ export function UsersManagementClient({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='super_admin'>super_admin</SelectItem>
-                    <SelectItem value='admin'>admin</SelectItem>
-                    <SelectItem value='member'>member</SelectItem>
+                    <SelectItem value='super_admin'>超级管理员</SelectItem>
+                    <SelectItem value='admin'>管理员</SelectItem>
+                    <SelectItem value='member'>成员</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -402,9 +460,9 @@ export function UsersManagementClient({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='active'>active</SelectItem>
-                    <SelectItem value='invited'>invited</SelectItem>
-                    <SelectItem value='disabled'>disabled</SelectItem>
+                    <SelectItem value='active'>启用中</SelectItem>
+                    <SelectItem value='invited'>待激活</SelectItem>
+                    <SelectItem value='disabled'>已停用</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

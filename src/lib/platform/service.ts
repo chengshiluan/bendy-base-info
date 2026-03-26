@@ -1,5 +1,6 @@
 import { and, asc, count, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { db, schema } from '@/lib/db';
+import { paginateItems } from './pagination';
 import {
   demoAuditLogs,
   demoFileAssets,
@@ -17,6 +18,7 @@ import type {
   FileAssetSummary,
   NotificationSummary,
   OptionItem,
+  PaginatedResult,
   PermissionSummary,
   RoleSummary,
   TeamSummary,
@@ -32,6 +34,25 @@ export type WorkspaceOption = {
   slug: string;
 };
 
+type PageQuery = {
+  page?: number;
+  pageSize?: number;
+};
+
+type SearchPageQuery = PageQuery & {
+  search?: string;
+};
+
+type NotificationPageQuery = SearchPageQuery & {
+  workspaceId?: string;
+  filter?: 'all' | 'unread' | 'read';
+};
+
+type TicketPageQuery = SearchPageQuery & {
+  workspaceId?: string;
+  filter?: 'all' | TicketSummary['status'];
+};
+
 function formatDateTime(value: Date | string | null | undefined): string {
   if (!value) {
     return '-';
@@ -42,6 +63,23 @@ function formatDateTime(value: Date | string | null | undefined): string {
   }
 
   return value.toLocaleString('zh-CN');
+}
+
+function normalizeKeyword(value?: string) {
+  return value?.trim().toLowerCase() ?? '';
+}
+
+function matchesKeyword(
+  keyword: string,
+  values: Array<string | null | undefined>
+) {
+  if (!keyword) {
+    return true;
+  }
+
+  return values
+    .filter((value): value is string => Boolean(value))
+    .some((value) => value.toLowerCase().includes(keyword));
 }
 
 export async function listWorkspaceOptions(
@@ -242,6 +280,40 @@ export async function listWorkspaces(
   );
 }
 
+export async function listWorkspacesPage(
+  query: SearchPageQuery & {
+    userId?: string;
+    systemRole?: string;
+  }
+): Promise<PaginatedResult<WorkspaceSummary>> {
+  const workspaces = await listWorkspaces(query.userId, query.systemRole);
+  const keyword = normalizeKeyword(query.search);
+  const filtered = workspaces.filter((workspace) =>
+    matchesKeyword(keyword, [
+      workspace.name,
+      workspace.slug,
+      workspace.description
+    ])
+  );
+
+  return paginateItems(filtered, query.page, query.pageSize);
+}
+
+export async function getWorkspaceSummaryMetrics(
+  userId?: string,
+  systemRole?: string
+) {
+  const workspaces = await listWorkspaces(userId, systemRole);
+
+  return {
+    total: workspaces.length,
+    active: workspaces.filter((workspace) => workspace.status === 'active')
+      .length,
+    archived: workspaces.filter((workspace) => workspace.status === 'archived')
+      .length
+  };
+}
+
 export async function listTeams(
   activeWorkspaceId?: string
 ): Promise<TeamSummary[]> {
@@ -333,6 +405,20 @@ export async function listTeams(
   }));
 }
 
+export async function listTeamsPage(
+  query: SearchPageQuery & {
+    workspaceId?: string;
+  }
+): Promise<PaginatedResult<TeamSummary>> {
+  const teams = await listTeams(query.workspaceId);
+  const keyword = normalizeKeyword(query.search);
+  const filtered = teams.filter((team) =>
+    matchesKeyword(keyword, [team.name, team.slug, team.description, team.lead])
+  );
+
+  return paginateItems(filtered, query.page, query.pageSize);
+}
+
 export async function listUsers(
   activeWorkspaceId?: string
 ): Promise<UserSummary[]> {
@@ -403,6 +489,20 @@ export async function listUsers(
   }));
 }
 
+export async function listUsersPage(
+  query: SearchPageQuery & {
+    workspaceId?: string;
+  }
+): Promise<PaginatedResult<UserSummary>> {
+  const users = await listUsers(query.workspaceId);
+  const keyword = normalizeKeyword(query.search);
+  const filtered = users.filter((user) =>
+    matchesKeyword(keyword, [user.githubUsername, user.displayName, user.email])
+  );
+
+  return paginateItems(filtered, query.page, query.pageSize);
+}
+
 export async function listRoles(
   activeWorkspaceId?: string
 ): Promise<RoleSummary[]> {
@@ -465,6 +565,20 @@ export async function listRoles(
   }));
 }
 
+export async function listRolesPage(
+  query: SearchPageQuery & {
+    workspaceId?: string;
+  }
+): Promise<PaginatedResult<RoleSummary>> {
+  const roles = await listRoles(query.workspaceId);
+  const keyword = normalizeKeyword(query.search);
+  const filtered = roles.filter((role) =>
+    matchesKeyword(keyword, [role.key, role.name, role.description])
+  );
+
+  return paginateItems(filtered, query.page, query.pageSize);
+}
+
 export async function listPermissions(): Promise<PermissionSummary[]> {
   if (!db) {
     return demoPermissions;
@@ -483,6 +597,23 @@ export async function listPermissions(): Promise<PermissionSummary[]> {
     })
     .from(schema.permissions)
     .orderBy(asc(schema.permissions.module), asc(schema.permissions.action));
+}
+
+export async function listPermissionsPage(
+  query: SearchPageQuery = {}
+): Promise<PaginatedResult<PermissionSummary>> {
+  const permissions = await listPermissions();
+  const keyword = normalizeKeyword(query.search);
+  const filtered = permissions.filter((permission) =>
+    matchesKeyword(keyword, [
+      permission.name,
+      permission.code,
+      permission.module,
+      permission.action
+    ])
+  );
+
+  return paginateItems(filtered, query.page, query.pageSize);
 }
 
 export async function listAdminNotifications(
@@ -569,6 +700,32 @@ export async function listAdminNotifications(
         ? '当前工作区'
         : '系统广播'
   }));
+}
+
+export async function listAdminNotificationsPage(
+  query: NotificationPageQuery
+): Promise<PaginatedResult<NotificationSummary>> {
+  const notifications = await listAdminNotifications(query.workspaceId);
+  const keyword = normalizeKeyword(query.search);
+  const filtered = notifications.filter((notification) => {
+    const matchesFilter =
+      query.filter === 'read'
+        ? notification.isRead
+        : query.filter === 'unread'
+          ? !notification.isRead
+          : true;
+
+    return (
+      matchesFilter &&
+      matchesKeyword(keyword, [
+        notification.title,
+        notification.content,
+        notification.targetLabel
+      ])
+    );
+  });
+
+  return paginateItems(filtered, query.page, query.pageSize);
 }
 
 export async function listNotifications(
@@ -752,6 +909,32 @@ export async function listTickets(
     commentCount: row.commentCount,
     updatedAt: formatDateTime(row.updatedAt)
   }));
+}
+
+export async function listTicketsPage(
+  query: TicketPageQuery
+): Promise<PaginatedResult<TicketSummary>> {
+  const tickets = await listTickets(query.workspaceId);
+  const keyword = normalizeKeyword(query.search);
+  const filtered = tickets.filter((ticket) => {
+    const matchesFilter =
+      query.filter && query.filter !== 'all'
+        ? ticket.status === query.filter
+        : true;
+
+    return (
+      matchesFilter &&
+      matchesKeyword(keyword, [
+        ticket.code,
+        ticket.title,
+        ticket.description,
+        ticket.assignee,
+        ticket.reporter
+      ])
+    );
+  });
+
+  return paginateItems(filtered, query.page, query.pageSize);
 }
 
 export async function listTicketComments(

@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { requireManagerApi } from '@/lib/auth/api-guard';
 import {
+  getPaginationParams,
   getSearchParam,
   handlePlatformError,
   parseJsonRequest
 } from '@/lib/platform/api';
 import { createRole } from '@/lib/platform/mutations';
-import { listRoles } from '@/lib/platform/service';
+import { listRolesPage } from '@/lib/platform/service';
 import { rolePayloadSchema } from '@/lib/platform/validators';
 
 export async function GET(request: Request) {
@@ -17,8 +18,16 @@ export async function GET(request: Request) {
     return response;
   }
 
-  const roles = await listRoles(workspaceId);
-  return NextResponse.json({ roles });
+  const { page, pageSize } = getPaginationParams(request);
+  const search = getSearchParam(request, 'search');
+  const { items, pagination } = await listRolesPage({
+    workspaceId,
+    search,
+    page,
+    pageSize
+  });
+
+  return NextResponse.json({ roles: items, pagination });
 }
 
 export async function POST(request: Request) {

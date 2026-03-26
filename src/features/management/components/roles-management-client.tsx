@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -29,13 +29,24 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import type { OptionItem, RoleSummary } from '@/lib/platform/types';
+import { useDebounce } from '@/hooks/use-debounce';
+import type {
+  OptionItem,
+  PaginationMeta,
+  RoleSummary
+} from '@/lib/platform/types';
 import { ConfirmActionDialog } from './confirm-action-dialog';
+import { ManagementPagination } from './management-pagination';
 import { OptionCheckboxGroup } from './option-checkbox-group';
-import { getErrorMessage, requestJson } from '../lib/client';
+import {
+  buildPathWithQuery,
+  getErrorMessage,
+  requestJson
+} from '../lib/client';
 
 interface RolesManagementClientProps {
   initialRoles: RoleSummary[];
+  initialPagination: PaginationMeta;
   workspaceId?: string;
   permissionOptions: OptionItem[];
 }
@@ -58,43 +69,94 @@ function createDefaultForm(): RoleFormState {
 
 export function RolesManagementClient({
   initialRoles,
+  initialPagination,
   workspaceId,
   permissionOptions
 }: RolesManagementClientProps) {
   const [roles, setRoles] = useState(initialRoles);
+  const [pagination, setPagination] = useState(initialPagination);
+  const [page, setPage] = useState(initialPagination.page);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [listPending, setListPending] = useState(false);
   const [submitPending, setSubmitPending] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
   const [editingRole, setEditingRole] = useState<RoleSummary | null>(null);
   const [deletingRole, setDeletingRole] = useState<RoleSummary | null>(null);
   const [form, setForm] = useState<RoleFormState>(createDefaultForm());
 
-  const filteredRoles = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-
-    if (!keyword) {
-      return roles;
-    }
-
-    return roles.filter((role) =>
-      [role.key, role.name, role.description]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(keyword))
-    );
-  }, [roles, search]);
-
   async function refreshRoles() {
     if (!workspaceId) {
       return;
     }
 
-    const data = await requestJson<{ roles: RoleSummary[] }>(
-      `/api/admin/roles?workspaceId=${workspaceId}`
+    const data = await requestJson<{
+      roles: RoleSummary[];
+      pagination: PaginationMeta;
+    }>(
+      buildPathWithQuery('/api/admin/roles', {
+        workspaceId,
+        page,
+        search: debouncedSearch
+      })
     );
     setRoles(data.roles);
+    setPagination(data.pagination);
+    if (data.pagination.page !== page) {
+      setPage(data.pagination.page);
+    }
   }
+
+  useEffect(() => {
+    if (!workspaceId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadRoles() {
+      setListPending(true);
+
+      try {
+        const data = await requestJson<{
+          roles: RoleSummary[];
+          pagination: PaginationMeta;
+        }>(
+          buildPathWithQuery('/api/admin/roles', {
+            workspaceId,
+            page,
+            search: debouncedSearch
+          })
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        setRoles(data.roles);
+        setPagination(data.pagination);
+        if (data.pagination.page !== page) {
+          setPage(data.pagination.page);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(getErrorMessage(error));
+        }
+      } finally {
+        if (!cancelled) {
+          setListPending(false);
+        }
+      }
+    }
+
+    void loadRoles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSearch, page, workspaceId]);
 
   function openCreateDialog() {
     setEditingRole(null);
@@ -205,9 +267,12 @@ export function RolesManagementClient({
           <div className='flex w-full flex-col gap-3 md:w-auto md:flex-row'>
             <Input
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
               placeholder='搜索角色键 / 名称 / 描述'
-              className='md:w-72'
+              className='md:w-80'
             />
             <Button onClick={openCreateDialog}>新增角色</Button>
           </div>
@@ -225,7 +290,7 @@ export function RolesManagementClient({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredRoles.map((role) => (
+              {roles.map((role) => (
                 <TableRow key={role.id}>
                   <TableCell className='font-medium'>{role.key}</TableCell>
                   <TableCell>{role.name}</TableCell>
@@ -262,7 +327,7 @@ export function RolesManagementClient({
                   </TableCell>
                 </TableRow>
               ))}
-              {!filteredRoles.length && (
+              {!roles.length && (
                 <TableRow>
                   <TableCell
                     colSpan={6}
@@ -274,6 +339,13 @@ export function RolesManagementClient({
               )}
             </TableBody>
           </Table>
+          <div className='mt-4'>
+            <ManagementPagination
+              pagination={pagination}
+              pending={listPending}
+              onPageChange={setPage}
+            />
+          </div>
         </CardContent>
       </Card>
 

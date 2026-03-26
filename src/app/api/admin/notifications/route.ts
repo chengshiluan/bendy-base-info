@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { requireManagerApi } from '@/lib/auth/api-guard';
 import {
+  getPaginationParams,
   getSearchParam,
   handlePlatformError,
   parseJsonRequest
 } from '@/lib/platform/api';
 import { createNotification } from '@/lib/platform/mutations';
-import { listAdminNotifications } from '@/lib/platform/service';
+import { listAdminNotificationsPage } from '@/lib/platform/service';
 import { notificationPayloadSchema } from '@/lib/platform/validators';
 
 export async function GET(request: Request) {
@@ -17,8 +18,22 @@ export async function GET(request: Request) {
     return response;
   }
 
-  const notifications = await listAdminNotifications(workspaceId);
-  return NextResponse.json({ notifications });
+  const { page, pageSize } = getPaginationParams(request);
+  const search = getSearchParam(request, 'search');
+  const filter = getSearchParam(request, 'filter') as
+    | 'all'
+    | 'unread'
+    | 'read'
+    | undefined;
+  const { items, pagination } = await listAdminNotificationsPage({
+    workspaceId,
+    search,
+    filter,
+    page,
+    pageSize
+  });
+
+  return NextResponse.json({ notifications: items, pagination });
 }
 
 export async function POST(request: Request) {

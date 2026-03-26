@@ -22,6 +22,7 @@ export default async function WorkspaceKanbanPage() {
       pageDescription='直接基于工单数据拖拽状态，和工单系统保持同一套流转。'
     >
       <TicketKanbanClient
+        key={activeWorkspaceId ?? 'no-workspace'}
         initialTickets={tickets}
         workspaceId={activeWorkspaceId}
       />
