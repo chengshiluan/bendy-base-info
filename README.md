@@ -18,11 +18,10 @@
 
 ![Bendywork Info Base Dashboard](public/project/im-1.png)
 
-| 登录与概览 | 管理后台 |
-| --- | --- |
-| ![Authentication](public/project/im-2.png) | ![Management](public/project/im-3.png) |
+| 登录与概览                                     | 管理后台                                       |
+| ---------------------------------------------- | ---------------------------------------------- |
+| ![Authentication](public/project/im-2.png)     | ![Management](public/project/im-3.png)         |
 | ![Workspace and Team](public/project/im-4.png) | ![Tickets and Kanban](public/project/im-5.png) |
-
 
 ## 这个项目是什么
 
@@ -64,24 +63,24 @@
 - 管理端关键流程最小验证清单
 - 通知、工单、上传、审计的深度业务联动
 
-详细路线图见 [Plan.md](./Plan.md)，版本记录见 [CHANGELOG.md](./CHANGELOG.md)。
+详细路线图见 [docs/PLAN.md](./docs/PLAN.md)，版本记录见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ## 技术栈
 
-| 类别 | 方案 |
-| --- | --- |
-| 框架 | Next.js 16 (App Router) |
-| UI | React 19, Tailwind CSS v4, shadcn/ui, Radix UI |
-| 语言 | TypeScript 5.7 |
-| 认证 | NextAuth.js, GitHub OAuth, Email Code |
-| 数据库 | Neon PostgreSQL |
-| ORM | Drizzle ORM + drizzle-kit |
-| 缓存 / 短期状态 | Upstash Redis |
-| 文件存储 | S3-compatible storage scaffold |
-| 表单 / 校验 | React Hook Form + Zod |
-| 表格 / 图表 | TanStack Table, Recharts |
-| 全局状态 | Zustand |
-| 部署建议 | Vercel |
+| 类别            | 方案                                           |
+| --------------- | ---------------------------------------------- |
+| 框架            | Next.js 16 (App Router)                        |
+| UI              | React 19, Tailwind CSS v4, shadcn/ui, Radix UI |
+| 语言            | TypeScript 5.7                                 |
+| 认证            | NextAuth.js, GitHub OAuth, Email Code          |
+| 数据库          | Neon PostgreSQL                                |
+| ORM             | Drizzle ORM + drizzle-kit                      |
+| 缓存 / 短期状态 | Upstash Redis                                  |
+| 文件存储        | S3-compatible storage scaffold                 |
+| 表单 / 校验     | React Hook Form + Zod                          |
+| 表格 / 图表     | TanStack Table, Recharts                       |
+| 全局状态        | Zustand                                        |
+| 部署建议        | Vercel                                         |
 
 ## 认证与基础设施配置（先配这个）
 
@@ -120,27 +119,27 @@ cp env.example.txt .env.local
 
 核心变量如下：
 
-| 变量名 | 本地是否必须 | 生产是否必须 | 说明 |
-| --- | --- | --- | --- |
-| `NEXT_PUBLIC_APP_NAME` | 否 | 否 | 前端展示用应用名 |
-| `NEXT_PUBLIC_APP_URL` | 建议 | 建议 | 前端显式使用的站点 URL |
-| `NEXTAUTH_URL` | 是 | 是 | NextAuth 回调与会话基准地址 |
-| `NEXTAUTH_SECRET` | 是 | 是 | 会话加密密钥，建议至少 32 位 |
-| `GITHUB_ID` | GitHub 登录必填 | GitHub 登录必填 | GitHub OAuth App Client ID |
-| `GITHUB_SECRET` | GitHub 登录必填 | GitHub 登录必填 | GitHub OAuth App Client Secret |
-| `DATABASE_URL` | 是 | 是 | PostgreSQL 连接串，推荐 Neon |
-| `UPSTASH_REDIS_REST_URL` | 邮箱登录必填 | 邮箱登录必填 | 验证码存储 |
-| `UPSTASH_REDIS_REST_TOKEN` | 邮箱登录必填 | 邮箱登录必填 | Redis 鉴权 Token |
-| `RESEND_API_KEY` | 否 | 邮箱登录强烈建议 | 邮件发送服务 |
-| `EMAIL_FROM` | 否 | 邮箱登录强烈建议 | 当前代码要求填写纯邮箱地址，如 `noreply@example.com` |
-| `S3_REGION` | 否 | 否 | 预留的对象存储区域 |
-| `S3_BUCKET` | 否 | 否 | 预留的对象存储 Bucket |
-| `S3_ENDPOINT` | 否 | 否 | 预留的 S3 兼容 Endpoint |
-| `S3_ACCESS_KEY_ID` | 否 | 否 | 预留的对象存储 Access Key |
-| `S3_SECRET_ACCESS_KEY` | 否 | 否 | 预留的对象存储 Secret Key |
-| `S3_PUBLIC_BASE_URL` | 否 | 否 | 预留的公开访问地址 |
-| `NEXT_PUBLIC_ENABLE_GITHUB_LOGIN` | 否 | 否 | 显式关闭 GitHub 登录入口 |
-| `NEXT_PUBLIC_ENABLE_EMAIL_LOGIN` | 否 | 否 | 显式关闭邮箱验证码登录入口 |
+| 变量名                            | 本地是否必须    | 生产是否必须     | 说明                                                 |
+| --------------------------------- | --------------- | ---------------- | ---------------------------------------------------- |
+| `NEXT_PUBLIC_APP_NAME`            | 否              | 否               | 前端展示用应用名                                     |
+| `NEXT_PUBLIC_APP_URL`             | 建议            | 建议             | 前端显式使用的站点 URL                               |
+| `NEXTAUTH_URL`                    | 是              | 是               | NextAuth 回调与会话基准地址                          |
+| `NEXTAUTH_SECRET`                 | 是              | 是               | 会话加密密钥，建议至少 32 位                         |
+| `GITHUB_ID`                       | GitHub 登录必填 | GitHub 登录必填  | GitHub OAuth App Client ID                           |
+| `GITHUB_SECRET`                   | GitHub 登录必填 | GitHub 登录必填  | GitHub OAuth App Client Secret                       |
+| `DATABASE_URL`                    | 是              | 是               | PostgreSQL 连接串，推荐 Neon                         |
+| `UPSTASH_REDIS_REST_URL`          | 邮箱登录必填    | 邮箱登录必填     | 验证码存储                                           |
+| `UPSTASH_REDIS_REST_TOKEN`        | 邮箱登录必填    | 邮箱登录必填     | Redis 鉴权 Token                                     |
+| `RESEND_API_KEY`                  | 否              | 邮箱登录强烈建议 | 邮件发送服务                                         |
+| `EMAIL_FROM`                      | 否              | 邮箱登录强烈建议 | 当前代码要求填写纯邮箱地址，如 `noreply@example.com` |
+| `S3_REGION`                       | 否              | 否               | 预留的对象存储区域                                   |
+| `S3_BUCKET`                       | 否              | 否               | 预留的对象存储 Bucket                                |
+| `S3_ENDPOINT`                     | 否              | 否               | 预留的 S3 兼容 Endpoint                              |
+| `S3_ACCESS_KEY_ID`                | 否              | 否               | 预留的对象存储 Access Key                            |
+| `S3_SECRET_ACCESS_KEY`            | 否              | 否               | 预留的对象存储 Secret Key                            |
+| `S3_PUBLIC_BASE_URL`              | 否              | 否               | 预留的公开访问地址                                   |
+| `NEXT_PUBLIC_ENABLE_GITHUB_LOGIN` | 否              | 否               | 显式关闭 GitHub 登录入口                             |
+| `NEXT_PUBLIC_ENABLE_EMAIL_LOGIN`  | 否              | 否               | 显式关闭邮箱验证码登录入口                           |
 
 说明：
 
@@ -412,10 +411,11 @@ src/
   styles/
     themes/                       # 主题 CSS
 docs/
+  AGENTS.md                       # AI / 开发协作约束
+  PLAN.md                         # 路线图与当前迭代计划
+  maintain.md                     # 维护手册与开发记录
   auth-infra.md                   # 认证与基础设施说明
   nav-rbac.md                     # 权限与导航说明
-Plan.md                           # 路线图
-maintain.md                       # 维护手册
 CHANGELOG.md                      # 版本记录
 ```
 
@@ -476,19 +476,21 @@ Schema 入口：
 
 更详细的迭代计划见：
 
-- [Plan.md](./Plan.md)
+- [docs/PLAN.md](./docs/PLAN.md)
 - [CHANGELOG.md](./CHANGELOG.md)
-- [maintain.md](./maintain.md)
+- [docs/maintain.md](./docs/maintain.md)
 
 ## 文档索引
 
+- [docs/AGENTS.md](./docs/AGENTS.md)
+  - AI / 开发协作约束
 - [docs/auth-infra.md](./docs/auth-infra.md)
   - 认证、数据库、Redis、邮件与部署基础说明
 - [docs/nav-rbac.md](./docs/nav-rbac.md)
   - 导航与权限模型说明
-- [Plan.md](./Plan.md)
+- [docs/PLAN.md](./docs/PLAN.md)
   - 后续路线图
-- [maintain.md](./maintain.md)
+- [docs/maintain.md](./docs/maintain.md)
   - 启动、维护、发布、排障手册
 - [CHANGELOG.md](./CHANGELOG.md)
   - 版本更新记录
