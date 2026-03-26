@@ -255,7 +255,7 @@ export function TeamsManagementClient({
       const payload = {
         workspaceId,
         ...form,
-        leadUserId: form.leadUserId || null
+        leadUserId: form.leadUserId || undefined
       };
 
       if (editingTeam) {

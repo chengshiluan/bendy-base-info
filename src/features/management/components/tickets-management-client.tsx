@@ -96,7 +96,7 @@ function getTicketPayload(workspaceId: string, form: TicketFormState) {
     description: form.description,
     priority: form.priority,
     status: form.status,
-    assigneeId: form.assigneeId || null
+    assigneeId: form.assigneeId || undefined
   };
 }
 

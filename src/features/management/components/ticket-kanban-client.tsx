@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   DndContext,
   DragEndEvent,
@@ -136,11 +136,6 @@ export function TicketKanbanClient({
   const [tickets, setTickets] = useState(initialTickets);
   const [search, setSearch] = useState('');
   const sensors = useSensors(useSensor(PointerSensor));
-
-  useEffect(() => {
-    setTickets(initialTickets);
-    setSearch('');
-  }, [initialTickets]);
 
   const filteredTickets = useMemo(() => {
     const keyword = search.trim().toLowerCase();

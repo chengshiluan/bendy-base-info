@@ -15,6 +15,9 @@ export default async function WorkspaceKanbanPage() {
     session.user.defaultWorkspaceId ||
     undefined;
   const tickets = await listTickets(activeWorkspaceId);
+  const kanbanSnapshotKey = tickets
+    .map((ticket) => `${ticket.id}:${ticket.status}:${ticket.updatedAt}`)
+    .join('|');
 
   return (
     <PageContainer
@@ -22,7 +25,7 @@ export default async function WorkspaceKanbanPage() {
       pageDescription='直接基于工单数据拖拽状态，和工单系统保持同一套流转。'
     >
       <TicketKanbanClient
-        key={activeWorkspaceId ?? 'no-workspace'}
+        key={`${activeWorkspaceId ?? 'no-workspace'}:${kanbanSnapshotKey}`}
         initialTickets={tickets}
         workspaceId={activeWorkspaceId}
       />

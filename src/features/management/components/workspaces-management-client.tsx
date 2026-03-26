@@ -250,7 +250,7 @@ export function WorkspacesManagementClient({
   const tableColumns = canManage ? 7 : 6;
 
   return (
-    <>
+    <div className='space-y-6'>
       <div className='grid gap-4 md:grid-cols-3'>
         <Card>
           <CardHeader>
@@ -505,6 +505,6 @@ export function WorkspacesManagementClient({
           onConfirm={handleArchive}
         />
       ) : null}
-    </>
+    </div>
   );
 }

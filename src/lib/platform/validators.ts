@@ -1,29 +1,23 @@
 import { z } from 'zod';
 
 const trimmedString = z.string().trim();
-const nullableString = z
-  .union([trimmedString, z.literal('')])
-  .optional()
-  .transform((value) => {
-    if (!value) {
-      return null;
-    }
 
-    const normalized = value.trim();
-    return normalized.length ? normalized : null;
-  });
+function normalizeNullableInput(value: string | null | undefined) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized.length ? normalized : null;
+}
+
+const nullableString = z
+  .union([trimmedString, z.null(), z.undefined()])
+  .transform(normalizeNullableInput);
 
 const nullableSlug = z
-  .union([trimmedString.max(80), z.literal('')])
-  .optional()
-  .transform((value) => {
-    if (!value) {
-      return null;
-    }
-
-    const normalized = value.trim();
-    return normalized.length ? normalized : null;
-  });
+  .union([z.string().trim().max(80), z.null(), z.undefined()])
+  .transform(normalizeNullableInput);
 
 export const workspacePayloadSchema = z.object({
   name: trimmedString.min(1).max(120),

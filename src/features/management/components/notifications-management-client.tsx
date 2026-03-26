@@ -191,16 +191,33 @@ export function NotificationsManagementClient({
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    const title = form.title.trim();
+    const content = form.content.trim();
+
+    if (!title || !content) {
+      toast.error('通知标题和内容不能为空。');
+      return;
+    }
+
+    if (form.targetType !== 'global' && !workspaceId) {
+      toast.error('当前没有可操作的工作区。');
+      return;
+    }
+
+    if (form.targetType === 'user' && !form.userId) {
+      toast.error('请选择接收成员。');
+      return;
+    }
+
     setSubmitPending(true);
 
     try {
       const payload = {
-        title: form.title,
-        content: form.content,
+        title,
+        content,
         level: form.level,
-        workspaceId:
-          form.targetType === 'global' ? null : (workspaceId ?? null),
-        userId: form.targetType === 'user' ? form.userId : null
+        ...(form.targetType !== 'global' && workspaceId ? { workspaceId } : {}),
+        ...(form.targetType === 'user' ? { userId: form.userId } : {})
       };
 
       if (editingNotification) {
@@ -469,7 +486,11 @@ export function NotificationsManagementClient({
                 <Select
                   value={form.targetType}
                   onValueChange={(value: NotificationTargetType) =>
-                    setForm((current) => ({ ...current, targetType: value }))
+                    setForm((current) => ({
+                      ...current,
+                      targetType: value,
+                      userId: value === 'user' ? current.userId : ''
+                    }))
                   }
                 >
                   <SelectTrigger className='w-full'>
@@ -491,9 +512,16 @@ export function NotificationsManagementClient({
                   onValueChange={(value) =>
                     setForm((current) => ({ ...current, userId: value }))
                   }
+                  disabled={!memberOptions.length}
                 >
                   <SelectTrigger className='w-full'>
-                    <SelectValue placeholder='请选择接收成员' />
+                    <SelectValue
+                      placeholder={
+                        memberOptions.length
+                          ? '请选择接收成员'
+                          : '当前工作区暂无可选成员'
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {memberOptions.map((option) => (
