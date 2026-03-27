@@ -3,6 +3,9 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { env } from '@/lib/env';
 import { db, schema } from '@/lib/db';
 import {
+  actionPermissionCode,
+  getPermissionSeed,
+  menuPermissionCode,
   permissionSeeds,
   systemRoleKeys,
   systemRoleSeeds,
@@ -15,9 +18,110 @@ interface BootstrapResult {
   patchedRoles: number;
   insertedRolePermissions: number;
   insertedWorkspaceMemberRoles: number;
+  migratedLegacyRolePermissions: number;
+  deletedLegacyPermissions: number;
 }
 
 let initializationPromise: Promise<void> | null = null;
+
+const legacyPermissionReplacementCodeMap = {
+  'files.upload': [
+    actionPermissionCode('upload', 'dashboard', 'workspaces', 'tickets')
+  ],
+  'kanban.manage': [
+    actionPermissionCode('update', 'dashboard', 'workspaces', 'kanban')
+  ],
+  'kanban.view': [menuPermissionCode('dashboard', 'workspaces', 'kanban')],
+  'notifications.manage': [
+    actionPermissionCode('create', 'dashboard', 'workspaces', 'notifications'),
+    actionPermissionCode('update', 'dashboard', 'workspaces', 'notifications'),
+    actionPermissionCode('delete', 'dashboard', 'workspaces', 'notifications'),
+    actionPermissionCode('read', 'dashboard', 'workspaces', 'notifications')
+  ],
+  'notifications.publish': [
+    actionPermissionCode('create', 'dashboard', 'workspaces', 'notifications')
+  ],
+  'notifications.view': [
+    menuPermissionCode('dashboard', 'workspaces', 'notifications')
+  ],
+  'permissions.manage': [
+    actionPermissionCode('create', 'dashboard', 'workspaces', 'permissions'),
+    actionPermissionCode('update', 'dashboard', 'workspaces', 'permissions'),
+    actionPermissionCode('delete', 'dashboard', 'workspaces', 'permissions')
+  ],
+  'permissions.view': [
+    menuPermissionCode('dashboard', 'workspaces', 'permissions')
+  ],
+  'roles.manage': [
+    actionPermissionCode('create', 'dashboard', 'workspaces', 'roles'),
+    actionPermissionCode('update', 'dashboard', 'workspaces', 'roles'),
+    actionPermissionCode('delete', 'dashboard', 'workspaces', 'roles')
+  ],
+  'roles.view': [menuPermissionCode('dashboard', 'workspaces', 'roles')],
+  'teams.manage': [
+    actionPermissionCode('create', 'dashboard', 'workspaces', 'teams'),
+    actionPermissionCode('update', 'dashboard', 'workspaces', 'teams'),
+    actionPermissionCode('delete', 'dashboard', 'workspaces', 'teams'),
+    actionPermissionCode('import', 'dashboard', 'workspaces', 'teams')
+  ],
+  'teams.view': [menuPermissionCode('dashboard', 'workspaces', 'teams')],
+  'tickets.assign': [
+    actionPermissionCode('assign', 'dashboard', 'workspaces', 'tickets')
+  ],
+  'tickets.comment': [
+    actionPermissionCode('comment', 'dashboard', 'workspaces', 'tickets')
+  ],
+  'tickets.manage': [
+    actionPermissionCode('create', 'dashboard', 'workspaces', 'tickets'),
+    actionPermissionCode('update', 'dashboard', 'workspaces', 'tickets'),
+    actionPermissionCode('delete', 'dashboard', 'workspaces', 'tickets'),
+    actionPermissionCode('assign', 'dashboard', 'workspaces', 'tickets'),
+    actionPermissionCode('comment', 'dashboard', 'workspaces', 'tickets'),
+    actionPermissionCode('upload', 'dashboard', 'workspaces', 'tickets')
+  ],
+  'tickets.view': [menuPermissionCode('dashboard', 'workspaces', 'tickets')],
+  'users.import': [
+    actionPermissionCode('import', 'dashboard', 'workspaces', 'teams')
+  ],
+  'users.manage': [
+    actionPermissionCode('create', 'dashboard', 'workspaces', 'users'),
+    actionPermissionCode('update', 'dashboard', 'workspaces', 'users'),
+    actionPermissionCode('delete', 'dashboard', 'workspaces', 'users')
+  ],
+  'users.view': [menuPermissionCode('dashboard', 'workspaces', 'users')]
+} as const satisfies Record<string, string[]>;
+
+const legacyPermissionCodesToDelete = [
+  'audit_logs.view',
+  'dashboard.view',
+  'files.view',
+  'profile.update',
+  'profile.view',
+  'workspaces.manage',
+  'workspaces.switch',
+  'workspaces.view',
+  ...Object.keys(legacyPermissionReplacementCodeMap)
+];
+
+function expandWorkspaceReplacementCodes(codes: string[]) {
+  const expanded = new Set<string>();
+
+  codes.forEach((code) => {
+    let currentCode: string | null | undefined = code;
+
+    while (currentCode) {
+      const seed = getPermissionSeed(currentCode);
+      if (!seed || seed.scope !== 'workspace' || expanded.has(currentCode)) {
+        break;
+      }
+
+      expanded.add(currentCode);
+      currentCode = seed.parentCode;
+    }
+  });
+
+  return Array.from(expanded);
+}
 
 const schemaInitializationStatements = [
   'create extension if not exists pgcrypto',
@@ -874,6 +978,101 @@ async function ensurePermissionSeeds() {
   };
 }
 
+async function ensureLegacyPermissionCleanup(
+  permissionIdByCode: Map<string, string>
+) {
+  if (!db || !legacyPermissionCodesToDelete.length) {
+    return {
+      migratedLegacyRolePermissions: 0,
+      deletedLegacyPermissions: 0
+    };
+  }
+
+  const legacyPermissions = await db
+    .select({
+      id: schema.permissions.id,
+      code: schema.permissions.code
+    })
+    .from(schema.permissions)
+    .where(inArray(schema.permissions.code, legacyPermissionCodesToDelete));
+
+  if (!legacyPermissions.length) {
+    return {
+      migratedLegacyRolePermissions: 0,
+      deletedLegacyPermissions: 0
+    };
+  }
+
+  const legacyPermissionIdByCode = new Map(
+    legacyPermissions.map(
+      (permission) => [permission.code, permission.id] as const
+    )
+  );
+  const legacyCodeByPermissionId = new Map(
+    legacyPermissions.map(
+      (permission) => [permission.id, permission.code] as const
+    )
+  );
+  const legacyPermissionIds = legacyPermissions.map(
+    (permission) => permission.id
+  );
+  const existingMappings = await db
+    .select({
+      roleId: schema.rolePermissions.roleId,
+      permissionId: schema.rolePermissions.permissionId
+    })
+    .from(schema.rolePermissions)
+    .where(inArray(schema.rolePermissions.permissionId, legacyPermissionIds));
+
+  const replacementIdsByLegacyCode = new Map<string, string[]>(
+    Object.entries(legacyPermissionReplacementCodeMap).map(
+      ([legacyCode, replacementCodes]) => [
+        legacyCode,
+        expandWorkspaceReplacementCodes([...replacementCodes])
+          .map((code) => permissionIdByCode.get(code))
+          .filter((permissionId): permissionId is string =>
+            Boolean(permissionId)
+          )
+      ]
+    )
+  );
+
+  const mappingRowsToInsert = existingMappings.flatMap((mapping) => {
+    const legacyCode = legacyCodeByPermissionId.get(mapping.permissionId);
+    if (!legacyCode) {
+      return [];
+    }
+
+    return (replacementIdsByLegacyCode.get(legacyCode) ?? []).map(
+      (permissionId) => ({
+        roleId: mapping.roleId,
+        permissionId
+      })
+    );
+  });
+
+  if (mappingRowsToInsert.length) {
+    await db
+      .insert(schema.rolePermissions)
+      .values(mappingRowsToInsert)
+      .onConflictDoNothing({
+        target: [
+          schema.rolePermissions.roleId,
+          schema.rolePermissions.permissionId
+        ]
+      });
+  }
+
+  await db
+    .delete(schema.permissions)
+    .where(inArray(schema.permissions.id, legacyPermissionIds));
+
+  return {
+    migratedLegacyRolePermissions: mappingRowsToInsert.length,
+    deletedLegacyPermissions: legacyPermissionIds.length
+  };
+}
+
 async function resolveTargetWorkspaceIds(workspaceIds?: string[]) {
   if (!db) {
     return [];
@@ -1219,12 +1418,16 @@ export async function ensureWorkspaceRbacInitialized(workspaceIds?: string[]) {
       insertedRoles: 0,
       patchedRoles: 0,
       insertedRolePermissions: 0,
-      insertedWorkspaceMemberRoles: 0
+      insertedWorkspaceMemberRoles: 0,
+      migratedLegacyRolePermissions: 0,
+      deletedLegacyPermissions: 0
     } satisfies BootstrapResult;
   }
 
   const { insertedPermissions, permissionIdByCode } =
     await ensurePermissionSeeds();
+  const { migratedLegacyRolePermissions, deletedLegacyPermissions } =
+    await ensureLegacyPermissionCleanup(permissionIdByCode);
   const { insertedRoles, patchedRoles, roles } =
     await ensureSystemRoles(workspaceIds);
   const insertedRolePermissions = await ensureSystemRolePermissions(
@@ -1239,7 +1442,9 @@ export async function ensureWorkspaceRbacInitialized(workspaceIds?: string[]) {
     insertedRoles,
     patchedRoles,
     insertedRolePermissions,
-    insertedWorkspaceMemberRoles
+    insertedWorkspaceMemberRoles,
+    migratedLegacyRolePermissions,
+    deletedLegacyPermissions
   } satisfies BootstrapResult;
 }
 
@@ -1259,7 +1464,9 @@ export async function ensureDatabaseInitialized() {
         result.insertedRoles ||
         result.patchedRoles ||
         result.insertedRolePermissions ||
-        result.insertedWorkspaceMemberRoles
+        result.insertedWorkspaceMemberRoles ||
+        result.migratedLegacyRolePermissions ||
+        result.deletedLegacyPermissions
       ) {
         console.info('[db:init] database bootstrap completed', result);
       }

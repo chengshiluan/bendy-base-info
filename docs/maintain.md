@@ -36,6 +36,24 @@
 
 ## 最近开发记录
 
+### 2026-03-27 - 历史未归类权限清理
+
+- 完成事项：
+  - 盘点当前库中的“历史未归类权限”后确认，真正需要处理的是 27 条旧模型遗留的扁平动作权限，例如 `teams.view`、`roles.manage`、`tickets.view`、`workspaces.switch`，而不是当前树里的工作区菜单节点
+  - 逐条核对这些旧权限后确认：本地库里不存在仍被角色引用的重复权限，也没有需要补回树结构的漏挂节点；27 条遗留权限全部属于当前模型已废弃的旧扁平编码
+  - 在 `src/lib/db/bootstrap.ts` 中补充 legacy 权限迁移与清理逻辑：对仍有明确替代关系的旧权限先映射到当前树形权限，再统一删除旧权限记录
+  - 在本地执行一次 `ensureWorkspaceRbacInitialized()`，实际删除 27 条遗留权限，当前库中“历史未归类权限”已清零
+- 验证：
+  - 在 Node `24.11.0` 环境执行库内巡检，确认旧扁平权限共 27 条，且本地库里 `roleCount` 全为 0
+  - 在 Node `24.11.0` 环境执行 `ensureWorkspaceRbacInitialized()`，返回 `deletedLegacyPermissions: 27`
+  - 在 Node `24.11.0` 环境复查数据库，确认剩余历史未归类权限数量为 0
+  - 在 Node `24.11.0` 环境执行 `npx tsc --noEmit`，通过
+  - 在 Node `24.11.0` 环境执行 `npm run lint`，通过；保留 2 条既有 `react-hooks/incompatible-library` warning（`src/components/forms/demo-form.tsx`、`src/hooks/use-data-table.ts`）
+  - 在 Node `24.11.0` 环境执行 `npm run build`，通过
+- 后续待办：
+  - 部署后复查线上库里是否存在仍被角色引用的旧扁平权限；如果有，将按本次 bootstrap 映射先迁移再删除
+  - 如后续要重新开放“自定义根权限”这类能力，需要先给它定义合法父节点，避免再次出现无父级扁平动作权限
+
 ### 2026-03-27 - 工作区权限树断层修复
 
 - 完成事项：
