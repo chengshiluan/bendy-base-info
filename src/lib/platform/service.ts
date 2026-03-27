@@ -193,6 +193,89 @@ export async function listPermissionTree(
   return buildPermissionTree(visiblePermissions);
 }
 
+function createVirtualPermissionSummary(
+  source: PermissionSummary
+): PermissionSummary {
+  return {
+    ...source,
+    id: `virtual:${source.code}`,
+    isVirtual: true
+  };
+}
+
+export async function listWorkspacePermissionTree(): Promise<
+  PermissionTreeNode[]
+> {
+  const permissions = await listPermissions();
+  const workspacePermissions = permissions.filter(
+    (permission) => permission.scope === 'workspace'
+  );
+  const permissionByCode = new Map(
+    permissions.map((permission) => [permission.code, permission] as const)
+  );
+  const visibleByCode = new Map(
+    workspacePermissions.map(
+      (permission) => [permission.code, permission] as const
+    )
+  );
+  const virtualAncestors = new Map<string, PermissionSummary>();
+
+  const ensureAncestorChain = (parentCode?: string | null) => {
+    if (
+      !parentCode ||
+      visibleByCode.has(parentCode) ||
+      virtualAncestors.has(parentCode)
+    ) {
+      return;
+    }
+
+    const parent =
+      permissionByCode.get(parentCode) ??
+      (() => {
+        const seed = getPermissionSeed(parentCode);
+        if (!seed) {
+          return null;
+        }
+
+        return {
+          id: `seed:${seed.code}`,
+          module: seed.module,
+          action: seed.action,
+          code: seed.code,
+          name: seed.name,
+          scope: seed.scope,
+          permissionType: seed.permissionType,
+          parentCode: seed.parentCode,
+          route: seed.route,
+          sortOrder: seed.sortOrder,
+          isSystem: seed.isSystem,
+          pathLabel: seed.pathLabel,
+          description: seed.description
+        } satisfies PermissionSummary;
+      })();
+
+    if (!parent) {
+      return;
+    }
+
+    ensureAncestorChain(parent.parentCode);
+    virtualAncestors.set(parent.code, createVirtualPermissionSummary(parent));
+  };
+
+  workspacePermissions.forEach((permission) => {
+    ensureAncestorChain(permission.parentCode);
+  });
+
+  return buildPermissionTree([
+    ...workspacePermissions,
+    ...Array.from(virtualAncestors.values())
+  ]);
+}
+
+export async function listRolePermissionTree(): Promise<PermissionTreeNode[]> {
+  return listWorkspacePermissionTree();
+}
+
 export async function listPermissionMenuOptions(
   scope: PermissionSummary['scope'] | 'all' = 'all'
 ): Promise<PermissionMenuOption[]> {

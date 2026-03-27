@@ -3,7 +3,10 @@ import { RolesManagementClient } from '@/features/management/components/roles-ma
 import { hasPermission } from '@/lib/auth/permission';
 import { requirePagePermission } from '@/lib/auth/session';
 import { getActiveWorkspaceCookie } from '@/lib/auth/workspace';
-import { listPermissionTree, listRolesPage } from '@/lib/platform/service';
+import {
+  listRolesPage,
+  listWorkspacePermissionTree
+} from '@/lib/platform/service';
 import { actionPermissionCode, menuPermissionCode } from '@/lib/platform/rbac';
 
 export default async function RolesPage() {
@@ -23,7 +26,7 @@ export default async function RolesPage() {
   const [{ items, pagination }, permissionTree] = activeWorkspaceId
     ? await Promise.all([
         listRolesPage({ workspaceId: activeWorkspaceId }),
-        listPermissionTree('workspace')
+        listWorkspacePermissionTree()
       ])
     : [{ items: [], pagination: emptyPagination }, []];
 

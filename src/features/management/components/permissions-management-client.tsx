@@ -357,7 +357,10 @@ export function PermissionsManagementClient({
 
           {canManageAny ? (
             <div className='flex flex-wrap items-start justify-end gap-2'>
-              {access.canCreate && node.permissionType === 'menu' ? (
+              {access.canCreate &&
+              node.permissionType === 'menu' &&
+              node.scope === 'workspace' &&
+              !node.isVirtual ? (
                 <Button
                   type='button'
                   variant='outline'

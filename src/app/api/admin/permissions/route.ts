@@ -9,7 +9,7 @@ import { createPermission } from '@/lib/platform/mutations';
 import { actionPermissionCode, menuPermissionCode } from '@/lib/platform/rbac';
 import {
   listPermissionMenuOptions,
-  listPermissionTree
+  listWorkspacePermissionTree
 } from '@/lib/platform/service';
 import { permissionPayloadSchema } from '@/lib/platform/validators';
 
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   }
 
   const [permissions, menuOptions] = await Promise.all([
-    listPermissionTree('workspace'),
+    listWorkspacePermissionTree(),
     listPermissionMenuOptions('workspace')
   ]);
 

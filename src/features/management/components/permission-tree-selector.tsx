@@ -30,7 +30,7 @@ function getExpandableCodes(nodes: PermissionTreeNode[]) {
 }
 
 function getDefaultExpandedCodes(nodes: PermissionTreeNode[]) {
-  return nodes.filter((node) => node.children.length).map((node) => node.code);
+  return getExpandableCodes(nodes);
 }
 
 function isOrphanActionRoot(node: PermissionTreeNode) {

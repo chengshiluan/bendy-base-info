@@ -6,7 +6,7 @@ import { getActiveWorkspaceCookie } from '@/lib/auth/workspace';
 import { actionPermissionCode, menuPermissionCode } from '@/lib/platform/rbac';
 import {
   listPermissionMenuOptions,
-  listPermissionTree
+  listWorkspacePermissionTree
 } from '@/lib/platform/service';
 
 export default async function PermissionsPage() {
@@ -18,7 +18,7 @@ export default async function PermissionsPage() {
   const activeWorkspaceId =
     cookieWorkspaceId || session.user.defaultWorkspaceId || undefined;
   const [permissionTree, menuOptions] = await Promise.all([
-    listPermissionTree('workspace'),
+    listWorkspacePermissionTree(),
     listPermissionMenuOptions('workspace')
   ]);
 

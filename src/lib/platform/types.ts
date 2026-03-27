@@ -57,6 +57,7 @@ export interface PermissionSummary {
   route?: string | null;
   sortOrder: number;
   isSystem: boolean;
+  isVirtual?: boolean;
   pathLabel: string;
   description?: string | null;
 }

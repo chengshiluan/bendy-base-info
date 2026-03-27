@@ -143,7 +143,7 @@ export function filterPermissionTree(
 
 export function collectPermissionIds(node: PermissionTreeNode): string[] {
   return [
-    node.id,
+    ...(node.isVirtual ? [] : [node.id]),
     ...node.children.flatMap((child) => collectPermissionIds(child))
   ];
 }

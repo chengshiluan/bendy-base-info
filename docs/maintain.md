@@ -36,6 +36,21 @@
 
 ## 最近开发记录
 
+### 2026-03-27 - 工作区权限树断层修复
+
+- 完成事项：
+  - 定位当前“权限不成树、还有零散节点”的直接原因是工作区权限树按 `scope=workspace` 过滤后丢失了全局祖先 `dashboard.workspaces.menu`，导致角色页、权限页和权限接口拿到的都是断裂树
+  - 在 `src/lib/platform/service.ts` 新增 `listWorkspacePermissionTree()`，统一为工作区权限补齐缺失祖先链，再供角色管理页、权限管理页和 `/api/admin/permissions` 复用
+  - 调整 `PermissionTreeSelector` 的勾选逻辑，虚拟祖先节点只负责承载子树，不再把虚拟 ID 提交给角色写入接口
+  - 调整权限管理页的新增入口，仅允许在真实工作区菜单节点下新增下级权限，避免对虚拟全局祖先发起无效创建
+- 验证：
+  - 在 Node `24.11.0` 环境执行 `npx tsc --noEmit`，通过
+  - 在 Node `24.11.0` 环境执行 `npm run lint`，通过；保留 2 条既有 `react-hooks/incompatible-library` warning（`src/components/forms/demo-form.tsx`、`src/hooks/use-data-table.ts`）
+  - 在 Node `24.11.0` 环境执行 `npm run build`，通过
+- 后续待办：
+  - 部署后进入角色管理页和权限管理页，确认 `工作区` 节点已恢复成完整树，角色保存不会再带入虚拟权限 ID
+  - 如后续需要支持在 `dashboard.workspaces.menu` 下新增自定义一级菜单，再单独放开全局父菜单的创建约束
+
 ### 2026-03-27 - 角色权限树与遗留权限收口
 
 - 完成事项：
