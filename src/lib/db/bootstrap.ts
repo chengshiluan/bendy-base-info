@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { env } from '@/lib/env';
 import { db, schema } from '@/lib/db';
 import {
@@ -422,17 +422,26 @@ function buildDatabaseInitializationSql() {
     const codes = role.permissionCodes
       .map((code) => formatSqlLiteral(code))
       .join(', ');
-    return `insert into role_permissions (role_id, permission_id)
+    return `delete from role_permissions as target_role_permissions
+using roles as seeded_roles
+where seeded_roles.id = target_role_permissions.role_id
+  and seeded_roles.key = ${formatSqlLiteral(role.key)}
+  and target_role_permissions.permission_id not in (
+    select seeded_permissions.id
+    from permissions as seeded_permissions
+    where seeded_permissions.code in (${codes})
+  );
+
+insert into role_permissions (role_id, permission_id)
 select seeded_roles.id, seeded_permissions.id
 from roles as seeded_roles
 join permissions as seeded_permissions
   on seeded_permissions.code in (${codes})
+left join role_permissions as existing_role_permissions
+  on existing_role_permissions.role_id = seeded_roles.id
+ and existing_role_permissions.permission_id = seeded_permissions.id
 where seeded_roles.key = ${formatSqlLiteral(role.key)}
-  and not exists (
-    select 1
-    from role_permissions as existing_role_permissions
-    where existing_role_permissions.role_id = seeded_roles.id
-  )
+  and existing_role_permissions.role_id is null
 on conflict (role_id, permission_id) do nothing;`;
   });
 
@@ -1038,6 +1047,14 @@ async function ensureSystemRolePermissions(
       (mapping) => `${mapping.roleId}:${mapping.permissionId}`
     )
   );
+  const existingPermissionIdsByRoleId = new Map<string, string[]>();
+  existingMappings.forEach((mapping) => {
+    const current = existingPermissionIdsByRoleId.get(mapping.roleId) ?? [];
+    current.push(mapping.permissionId);
+    existingPermissionIdsByRoleId.set(mapping.roleId, current);
+  });
+
+  const desiredPermissionIdsByRoleId = new Map<string, string[]>();
   const rolePermissionRows = roles.flatMap((role) => {
     const seed = systemRoleSeeds.find(
       (candidate) => candidate.key === role.key
@@ -1047,9 +1064,12 @@ async function ensureSystemRolePermissions(
       return [];
     }
 
-    return seed.permissionCodes
+    const desiredPermissionIds = seed.permissionCodes
       .map((code) => permissionIdByCode.get(code))
-      .filter((permissionId): permissionId is string => Boolean(permissionId))
+      .filter((permissionId): permissionId is string => Boolean(permissionId));
+    desiredPermissionIdsByRoleId.set(role.id, desiredPermissionIds);
+
+    return desiredPermissionIds
       .filter(
         (permissionId) => !existingMappingSet.has(`${role.id}:${permissionId}`)
       )
@@ -1058,6 +1078,28 @@ async function ensureSystemRolePermissions(
         permissionId
       }));
   });
+
+  for (const role of roles) {
+    const desiredPermissionIds =
+      desiredPermissionIdsByRoleId.get(role.id) ?? [];
+    const desiredPermissionIdSet = new Set(desiredPermissionIds);
+    const stalePermissionIds = (
+      existingPermissionIdsByRoleId.get(role.id) ?? []
+    ).filter((permissionId) => !desiredPermissionIdSet.has(permissionId));
+
+    if (!stalePermissionIds.length) {
+      continue;
+    }
+
+    await db
+      .delete(schema.rolePermissions)
+      .where(
+        and(
+          eq(schema.rolePermissions.roleId, role.id),
+          inArray(schema.rolePermissions.permissionId, stalePermissionIds)
+        )
+      );
+  }
 
   if (!rolePermissionRows.length) {
     return 0;

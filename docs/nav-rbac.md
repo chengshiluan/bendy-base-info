@@ -5,13 +5,13 @@
 系统分两层控制：
 
 - 系统级角色：`super_admin` / `admin` / `member`
-- 工作区内细粒度权限：例如 `users.create`、`users.update`、`roles.manage`、`tickets.assign`
+- 工作区内细粒度权限：以“菜单节点 + 操作节点”树形组织
 
 ## 设计原则
 
 - 导航过滤只负责体验，不负责最终安全
 - 真正的数据读写权限要在服务端校验
-- 权限码要细到按钮级，便于后续做精细控制
+- 权限码要细到按钮级，并且优先挂在菜单树下，便于角色弹窗按树展示
 - 用户主身份基于 GitHub 用户名，不单独维护用户名密码体系
 
 ## 当前导航结构
@@ -26,20 +26,22 @@
 - 看板
 - 工单系统
 
-## 权限码建议
+## 当前权限码形态
 
-推荐按照 `模块.动作` 形式维护：
+当前仓库已经切到树形权限编码，推荐直接复用菜单节点与按钮节点：
 
-- `users.view`
-- `users.create`
-- `users.update`
-- `users.delete`
-- `roles.view`
-- `roles.manage`
-- `permissions.manage`
-- `teams.manage`
-- `notifications.view`
-- `tickets.assign`
+- 菜单节点：`dashboard.workspaces.roles.menu`
+- 页面操作：`dashboard.workspaces.roles.create`
+- 页面操作：`dashboard.workspaces.roles.update`
+- 页面操作：`dashboard.workspaces.roles.delete`
+- 菜单节点：`dashboard.workspaces.permissions.menu`
+- 页面操作：`dashboard.workspaces.permissions.create`
+- 菜单节点：`dashboard.workspaces.tickets.menu`
+- 页面操作：`dashboard.workspaces.tickets.assign`
+- 菜单节点：`dashboard.profile.menu`
+- 页面操作：`dashboard.profile.update`
+
+角色管理里的“绑定权限”应优先按当前菜单树展示；没有挂到菜单树上的历史权限，只能作为兼容项收纳，不能再作为主展示结构。
 
 ## 服务端约束
 

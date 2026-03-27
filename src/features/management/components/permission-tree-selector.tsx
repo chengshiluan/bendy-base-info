@@ -29,6 +29,18 @@ function getExpandableCodes(nodes: PermissionTreeNode[]) {
     .map((node) => node.code);
 }
 
+function getDefaultExpandedCodes(nodes: PermissionTreeNode[]) {
+  return nodes.filter((node) => node.children.length).map((node) => node.code);
+}
+
+function isOrphanActionRoot(node: PermissionTreeNode) {
+  return (
+    node.permissionType === 'action' &&
+    !node.parentCode &&
+    node.children.length === 0
+  );
+}
+
 export function PermissionTreeSelector({
   tree,
   value,
@@ -38,17 +50,30 @@ export function PermissionTreeSelector({
 }: PermissionTreeSelectorProps) {
   const [keyword, setKeyword] = useState('');
   const [expandedCodes, setExpandedCodes] = useState<string[]>(() =>
-    getExpandableCodes(tree)
+    getDefaultExpandedCodes(tree)
   );
+  const [legacySectionOpen, setLegacySectionOpen] = useState(false);
   const selectedIds = useMemo(() => new Set(value), [value]);
 
   useEffect(() => {
-    setExpandedCodes(getExpandableCodes(tree));
+    setExpandedCodes(getDefaultExpandedCodes(tree));
   }, [tree]);
 
   const filteredTree = useMemo(
     () => filterPermissionTree(tree, keyword),
     [keyword, tree]
+  );
+  const legacyRoots = useMemo(
+    () => tree.filter((node) => isOrphanActionRoot(node)),
+    [tree]
+  );
+  const structuredTree = useMemo(
+    () => filteredTree.filter((node) => !isOrphanActionRoot(node)),
+    [filteredTree]
+  );
+  const legacyTree = useMemo(
+    () => filteredTree.filter((node) => isOrphanActionRoot(node)),
+    [filteredTree]
   );
 
   if (!tree.length) {
@@ -61,6 +86,12 @@ export function PermissionTreeSelector({
 
   const expandedSet = new Set(expandedCodes);
   const visibleExpandableCodes = getExpandableCodes(filteredTree);
+  const selectedLegacyCount = legacyRoots.filter((node) =>
+    selectedIds.has(node.id)
+  ).length;
+  const shouldShowLegacySection = Boolean(legacyTree.length);
+  const legacySectionExpanded =
+    Boolean(keyword.trim()) || legacySectionOpen || !structuredTree.length;
 
   const toggleExpanded = (code: string) => {
     setExpandedCodes((current) =>
@@ -205,13 +236,55 @@ export function PermissionTreeSelector({
 
       <ScrollArea className={cn('rounded-md border', heightClassName)}>
         <div className='space-y-1 p-3'>
-          {filteredTree.length ? (
-            filteredTree.map((node) => renderNode(node))
+          {structuredTree.length ? (
+            structuredTree.map((node) => renderNode(node))
           ) : (
             <div className='text-muted-foreground py-8 text-center text-sm'>
-              没有匹配的权限节点。
+              {shouldShowLegacySection
+                ? '当前菜单树里没有匹配节点，请查看下方历史 / 未归类权限。'
+                : '没有匹配的权限节点。'}
             </div>
           )}
+
+          {shouldShowLegacySection ? (
+            <div className='mt-3 rounded-md border border-dashed'>
+              <button
+                type='button'
+                className='flex w-full items-center justify-between gap-3 px-3 py-2 text-left'
+                onClick={() => setLegacySectionOpen((current) => !current)}
+              >
+                <div className='min-w-0'>
+                  <div className='flex flex-wrap items-center gap-2'>
+                    <span className='text-sm font-medium'>
+                      历史 / 未归类权限
+                    </span>
+                    <Badge variant='secondary'>{legacyTree.length}</Badge>
+                    {selectedLegacyCount ? (
+                      <Badge variant='outline'>
+                        已选 {selectedLegacyCount}
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <p className='text-muted-foreground mt-1 text-xs'>
+                    这里收纳的是没有挂到当前菜单树上的旧权限或独立权限，避免干扰主权限树。
+                  </p>
+                </div>
+                {legacySectionExpanded ? (
+                  <ChevronDown className='text-muted-foreground size-4 shrink-0' />
+                ) : (
+                  <ChevronRight className='text-muted-foreground size-4 shrink-0' />
+                )}
+              </button>
+
+              {legacySectionExpanded ? (
+                <div className='border-t p-3 pt-2'>
+                  <div className='space-y-1'>
+                    {legacyTree.map((node) => renderNode(node))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </ScrollArea>
     </div>

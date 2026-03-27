@@ -36,6 +36,21 @@
 
 ## 最近开发记录
 
+### 2026-03-27 - 角色权限树与遗留权限收口
+
+- 完成事项：
+  - 定位角色管理弹窗“绑定权限”杂乱的直接原因是当前菜单树权限与历史扁平权限同时存在，导致角色编辑时混在一起展示
+  - 调整 `PermissionTreeSelector`，让角色弹窗默认按当前菜单树展示，并把未挂到菜单树上的历史 / 未归类权限收纳到单独分组
+  - 调整系统角色权限同步逻辑，启动期会移除 `super_admin` / `admin` / `member` 上不在当前种子里的旧权限映射，再补齐缺失的当前权限
+  - 让 `docs/database-init.sql` 直接由当前 bootstrap 权限种子生成，并同步更新 `docs/nav-rbac.md` 与 `docs/PLAN.md`
+- 验证：
+  - 在 Node `24.11.0` 环境执行 `npx tsc --noEmit`，通过
+  - 在 Node `24.11.0` 环境执行 `npm run lint`，通过；保留 2 条既有 `react-hooks/incompatible-library` warning（`src/components/forms/demo-form.tsx`、`src/hooks/use-data-table.ts`）
+  - 在 Node `24.11.0` 环境执行 `npm run build`，通过
+- 后续待办：
+  - 部署后进入角色管理页，确认系统内置角色会自动切换到当前菜单树权限，遗留权限仅在兼容分组中出现
+  - 如线上仍存在业务自定义的历史权限编码，可按业务需要决定是否继续迁移或下线
+
 ### 2026-03-27 - Legacy UUID 兼容补丁
 
 - 完成事项：
