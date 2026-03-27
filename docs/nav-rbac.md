@@ -30,6 +30,12 @@
 
 当前仓库已经切到树形权限编码，推荐直接复用菜单节点与按钮节点：
 
+- 菜单节点：`dashboard.overview.menu`
+- 菜单节点：`dashboard.workspaces.menu`
+- 隐藏菜单节点：`dashboard.workspaces.manage.menu`
+- 页面操作：`dashboard.workspaces.manage.create`
+- 页面操作：`dashboard.workspaces.manage.update`
+- 页面操作：`dashboard.workspaces.manage.archive`
 - 菜单节点：`dashboard.workspaces.roles.menu`
 - 页面操作：`dashboard.workspaces.roles.create`
 - 页面操作：`dashboard.workspaces.roles.update`
@@ -42,6 +48,8 @@
 - 页面操作：`dashboard.profile.update`
 
 角色管理里的“绑定权限”应优先按当前菜单树展示；没有挂到菜单树上的历史权限，只能作为兼容项收纳，不能再作为主展示结构。
+
+其中 `dashboard.workspaces.manage.menu` 属于隐藏菜单节点，不在左侧菜单栏直接展示，但它对应工作区切换器里的“管理工作区”入口，树层级与 `团队管理 / 用户管理 / 角色管理 / 权限管理` 保持一致。
 
 ## 服务端约束
 

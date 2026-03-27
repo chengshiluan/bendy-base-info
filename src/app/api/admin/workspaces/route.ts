@@ -16,7 +16,7 @@ import { workspacePayloadSchema } from '@/lib/platform/validators';
 
 export async function GET(request: Request) {
   const { session, response } = await requireApiPermission(
-    menuPermissionCode('dashboard', 'workspaces')
+    menuPermissionCode('dashboard', 'workspaces', 'manage')
   );
 
   if (response || !session) {
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
   }
 
   const { session, response } = await requireApiPermission(
-    actionPermissionCode('create', 'dashboard', 'workspaces')
+    actionPermissionCode('create', 'dashboard', 'workspaces', 'manage')
   );
 
   if (response || !session) {

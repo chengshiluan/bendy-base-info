@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     parsed.data.entityType === 'ticket' ||
     parsed.data.entityType === 'ticket_comment'
       ? actionPermissionCode('upload', 'dashboard', 'workspaces', 'tickets')
-      : actionPermissionCode('update', 'dashboard', 'workspaces');
+      : actionPermissionCode('update', 'dashboard', 'workspaces', 'manage');
   const { session, response } = await requireApiPermission(
     permissionCode,
     parsed.data.workspaceId

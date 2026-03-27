@@ -21,7 +21,7 @@ export async function PUT(
   }
 
   const { session, response } = await requireApiPermission(
-    actionPermissionCode('update', 'dashboard', 'workspaces')
+    actionPermissionCode('update', 'dashboard', 'workspaces', 'manage')
   );
 
   if (response || !session) {
@@ -46,7 +46,7 @@ export async function DELETE(
 ) {
   const routeParams = await params;
   const { session, response } = await requireApiPermission(
-    actionPermissionCode('archive', 'dashboard', 'workspaces')
+    actionPermissionCode('archive', 'dashboard', 'workspaces', 'manage')
   );
 
   if (response || !session) {

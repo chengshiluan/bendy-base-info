@@ -93,11 +93,16 @@ const legacyPermissionReplacementCodeMap = {
   ],
   'users.view': [menuPermissionCode('dashboard', 'workspaces', 'users')],
   'workspaces.manage': [
-    actionPermissionCode('create', 'dashboard', 'workspaces'),
-    actionPermissionCode('update', 'dashboard', 'workspaces'),
-    actionPermissionCode('archive', 'dashboard', 'workspaces')
+    menuPermissionCode('dashboard', 'workspaces'),
+    menuPermissionCode('dashboard', 'workspaces', 'manage'),
+    actionPermissionCode('create', 'dashboard', 'workspaces', 'manage'),
+    actionPermissionCode('update', 'dashboard', 'workspaces', 'manage'),
+    actionPermissionCode('archive', 'dashboard', 'workspaces', 'manage')
   ],
-  'workspaces.view': [menuPermissionCode('dashboard', 'workspaces')]
+  'workspaces.view': [
+    menuPermissionCode('dashboard', 'workspaces'),
+    menuPermissionCode('dashboard', 'workspaces', 'manage')
+  ]
 } as const satisfies Record<string, string[]>;
 
 const legacyPermissionCodesToDelete = [

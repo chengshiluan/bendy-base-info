@@ -18,6 +18,8 @@ import {
   SidebarMenuItem,
   useSidebar
 } from '@/components/ui/sidebar';
+import { hasPermission } from '@/lib/auth/permission';
+import { menuPermissionCode } from '@/lib/platform/rbac';
 
 interface WorkspaceOption {
   id: string;
@@ -99,6 +101,14 @@ export function OrgSwitcher() {
       null
     );
   }, [activeWorkspaceId, workspaces]);
+  const canManageWorkspaces = useMemo(
+    () =>
+      hasPermission(
+        data?.user,
+        menuPermissionCode('dashboard', 'workspaces', 'manage')
+      ),
+    [data?.user]
+  );
 
   const handleWorkspaceChange = async (workspaceId: string) => {
     setActiveWorkspaceId(workspaceId);
@@ -172,12 +182,16 @@ export function OrgSwitcher() {
                 </DropdownMenuItem>
               );
             })}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => router.push('/dashboard/workspaces')}
-            >
-              管理工作区
-            </DropdownMenuItem>
+            {canManageWorkspaces ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => router.push('/dashboard/workspaces')}
+                >
+                  管理工作区
+                </DropdownMenuItem>
+              </>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

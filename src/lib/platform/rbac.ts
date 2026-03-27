@@ -64,27 +64,35 @@ const permissionTreeNodes: PermissionMenuNode[] = [
     key: 'workspaces',
     title: '工作区',
     route: '/dashboard/workspaces',
-    description: '允许访问工作区目录和全局工作区入口。',
+    description: '允许展开工作区功能目录和全局工作区入口。',
     scope: 'global',
     icon: 'workspace',
-    actions: [
-      {
-        key: 'create',
-        title: '新增工作区',
-        description: '允许新增系统工作区。'
-      },
-      {
-        key: 'update',
-        title: '编辑工作区',
-        description: '允许编辑工作区基础资料。'
-      },
-      {
-        key: 'archive',
-        title: '归档工作区',
-        description: '允许归档工作区并停止在切换器中显示。'
-      }
-    ],
     children: [
+      {
+        key: 'manage',
+        title: '管理工作区',
+        route: '/dashboard/workspaces',
+        description: '允许通过工作区切换器或其他隐藏入口访问工作区管理页。',
+        scope: 'global',
+        hidden: true,
+        actions: [
+          {
+            key: 'create',
+            title: '新增工作区',
+            description: '允许新增系统工作区。'
+          },
+          {
+            key: 'update',
+            title: '编辑工作区',
+            description: '允许编辑工作区基础资料。'
+          },
+          {
+            key: 'archive',
+            title: '归档工作区',
+            description: '允许归档工作区并停止在切换器中显示。'
+          }
+        ]
+      },
       {
         key: 'teams',
         title: '团队管理',
@@ -517,6 +525,7 @@ const adminWorkspacePermissionCodes = allWorkspacePermissionCodes.slice();
 const memberGlobalPermissionCodes = [
   menuPermissionCode('dashboard', 'overview'),
   menuPermissionCode('dashboard', 'workspaces'),
+  menuPermissionCode('dashboard', 'workspaces', 'manage'),
   menuPermissionCode('dashboard', 'profile'),
   actionPermissionCode('update', 'dashboard', 'profile')
 ];

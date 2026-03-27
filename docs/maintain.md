@@ -36,6 +36,23 @@
 
 ## 最近开发记录
 
+### 2026-03-27 - 隐藏菜单节点补齐
+
+- 完成事项：
+  - 将 `管理工作区` 从“旧权限映射问题”提升为当前菜单模型中的真实隐藏菜单节点，挂到 `dashboard.workspaces.menu` 下，并把工作区管理页对应的 `新增 / 编辑 / 归档` 动作权限一起迁到该节点下
+  - 将权限管理页与 `/api/admin/permissions` 的树数据改为读取完整权限树，补上根层 `仪表盘`，并让 `工作区 -> 管理工作区` 在树层级上与 `团队管理 / 用户管理 / 角色管理 / 权限管理` 保持一致
+  - 联调 `src/components/org-switcher.tsx`、工作区管理页和工作区相关 API 守卫，让工作区切换器里的“管理工作区”入口与隐藏菜单权限保持一致
+  - 同步更新 `docs/database-init.sql` 与 `docs/nav-rbac.md`，确保初始化 SQL、权限码示例和当前菜单模型一致
+- 验证：
+  - 在 Node `24.11.0` 环境执行 `ensureWorkspaceRbacInitialized()`，返回 `insertedPermissions: 4`，本地库已补齐 `dashboard.workspaces.manage.menu` 与其 3 个动作权限
+  - 在 Node `24.11.0` 环境复查 `listPermissionTree('all')`，确认根层包含 `dashboard.overview.menu`，且 `dashboard.workspaces.menu` 下第一层包含 `dashboard.workspaces.manage.menu`
+  - 在 Node `24.11.0` 环境执行 `npx tsc --noEmit`，通过
+  - 在 Node `24.11.0` 环境执行 `npm run lint`，通过；保留 2 条既有 `react-hooks/incompatible-library` warning（`src/components/forms/demo-form.tsx`、`src/hooks/use-data-table.ts`）
+  - 在 Node `24.11.0` 环境执行 `npm run build`，通过
+- 后续待办：
+  - 部署后进入权限管理页，确认根层能看到 `仪表盘`，展开 `工作区菜单` 后能看到 `管理工作区`
+  - 部署后验证工作区切换器中的“管理工作区”仅在具备对应隐藏菜单权限时显示
+
 ### 2026-03-27 - 顶层旧权限映射修正
 
 - 完成事项：

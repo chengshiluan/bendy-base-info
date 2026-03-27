@@ -10,7 +10,7 @@ import {
 
 export default async function WorkspacesPage() {
   const session = await requirePagePermission(
-    menuPermissionCode('dashboard', 'workspaces')
+    menuPermissionCode('dashboard', 'workspaces', 'manage')
   );
   const [{ items, pagination }, summary] = await Promise.all([
     listWorkspacesPage({
@@ -32,15 +32,15 @@ export default async function WorkspacesPage() {
         access={{
           canCreate: hasPermission(
             session.user,
-            actionPermissionCode('create', 'dashboard', 'workspaces')
+            actionPermissionCode('create', 'dashboard', 'workspaces', 'manage')
           ),
           canUpdate: hasPermission(
             session.user,
-            actionPermissionCode('update', 'dashboard', 'workspaces')
+            actionPermissionCode('update', 'dashboard', 'workspaces', 'manage')
           ),
           canArchive: hasPermission(
             session.user,
-            actionPermissionCode('archive', 'dashboard', 'workspaces')
+            actionPermissionCode('archive', 'dashboard', 'workspaces', 'manage')
           )
         }}
       />

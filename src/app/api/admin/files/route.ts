@@ -23,7 +23,7 @@ export async function GET(request: Request) {
   const permissionCode =
     entityType === 'ticket' || entityType === 'ticket_comment'
       ? menuPermissionCode('dashboard', 'workspaces', 'tickets')
-      : menuPermissionCode('dashboard', 'workspaces');
+      : menuPermissionCode('dashboard', 'workspaces', 'manage');
   const { response } = await requireApiPermission(permissionCode, workspaceId);
 
   if (response) {
