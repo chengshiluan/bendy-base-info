@@ -1,14 +1,16 @@
 import { NextResponse } from 'next/server';
 import { requireApiPermission } from '@/lib/auth/api-guard';
 import {
-  getPaginationParams,
   getSearchParam,
   handlePlatformError,
   parseJsonRequest
 } from '@/lib/platform/api';
 import { createPermission } from '@/lib/platform/mutations';
 import { actionPermissionCode, menuPermissionCode } from '@/lib/platform/rbac';
-import { listPermissionsPage } from '@/lib/platform/service';
+import {
+  listPermissionMenuOptions,
+  listPermissionTree
+} from '@/lib/platform/service';
 import { permissionPayloadSchema } from '@/lib/platform/validators';
 
 export async function GET(request: Request) {
@@ -22,15 +24,12 @@ export async function GET(request: Request) {
     return response;
   }
 
-  const { page, pageSize } = getPaginationParams(request);
-  const search = getSearchParam(request, 'search');
-  const { items, pagination } = await listPermissionsPage({
-    search,
-    page,
-    pageSize
-  });
+  const [permissions, menuOptions] = await Promise.all([
+    listPermissionTree('workspace'),
+    listPermissionMenuOptions('workspace')
+  ]);
 
-  return NextResponse.json({ permissions: items, pagination });
+  return NextResponse.json({ permissions, menuOptions });
 }
 
 export async function POST(request: Request) {

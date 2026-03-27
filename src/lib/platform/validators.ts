@@ -50,8 +50,10 @@ export const rolePayloadSchema = z.object({
 export const permissionPayloadSchema = z.object({
   code: trimmedString.min(1).max(120),
   name: trimmedString.min(1).max(120),
-  module: trimmedString.min(1).max(60),
-  action: trimmedString.min(1).max(60),
+  permissionType: z.enum(['menu', 'action']),
+  parentCode: trimmedString.min(1).max(120),
+  route: nullableString,
+  sortOrder: z.coerce.number().int().min(0).max(99999).default(0),
   description: nullableString
 });
 

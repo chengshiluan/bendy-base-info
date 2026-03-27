@@ -17,6 +17,7 @@ import {
 import type {
   FileAssetSummary,
   ImportedWorkspaceGithubUser,
+  PermissionSummary,
   WorkspaceSummary
 } from './types';
 
@@ -52,6 +53,203 @@ function normalizeNullable(value?: string | null) {
 
 function uniqueValues(values: string[] = []) {
   return Array.from(new Set(values.filter(Boolean)));
+}
+
+type PermissionCatalog = {
+  permissions: PermissionSummary[];
+  byCode: Map<string, PermissionSummary>;
+  childrenByCode: Map<string, PermissionSummary[]>;
+};
+
+type PermissionMutationInput = {
+  code: string;
+  name: string;
+  permissionType: 'menu' | 'action';
+  parentCode: string;
+  route?: string | null;
+  sortOrder: number;
+  description?: string | null;
+};
+
+function normalizePermissionCode(input: string) {
+  return input
+    .split('.')
+    .map((segment) => slugify(segment).replace(/-/g, '_'))
+    .filter(Boolean)
+    .join('.');
+}
+
+function normalizeRouteInput(value?: string | null) {
+  const normalized = normalizeNullable(value);
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized.startsWith('/') ? normalized : `/${normalized}`;
+}
+
+function normalizeSortOrder(value: number) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.trunc(value));
+}
+
+function parsePermissionIdentity(
+  code: string,
+  permissionType: PermissionMutationInput['permissionType']
+) {
+  const normalizedCode = normalizePermissionCode(code);
+
+  if (!normalizedCode) {
+    throw new PlatformMutationError('权限编码不能为空。');
+  }
+
+  if (permissionType === 'menu') {
+    const menuCode = normalizedCode.endsWith('.menu')
+      ? normalizedCode
+      : `${normalizedCode}.menu`;
+
+    return {
+      code: menuCode,
+      module: menuCode.replace(/\.menu$/, ''),
+      action: 'menu'
+    };
+  }
+
+  if (normalizedCode.endsWith('.menu')) {
+    throw new PlatformMutationError('按钮权限编码不能以 .menu 结尾。');
+  }
+
+  const segments = normalizedCode.split('.').filter(Boolean);
+  if (segments.length < 2) {
+    throw new PlatformMutationError(
+      '按钮权限编码至少需要包含菜单路径和动作，例如 dashboard.workspaces.users.create。'
+    );
+  }
+
+  return {
+    code: normalizedCode,
+    module: segments.slice(0, -1).join('.'),
+    action: segments[segments.length - 1] ?? normalizedCode
+  };
+}
+
+async function getPermissionCatalog(): Promise<PermissionCatalog> {
+  const permissions = await listPermissions();
+  const byCode = new Map(
+    permissions.map((permission) => [permission.code, permission] as const)
+  );
+  const childrenByCode = new Map<string, PermissionSummary[]>();
+
+  permissions.forEach((permission) => {
+    if (!permission.parentCode) {
+      return;
+    }
+
+    const siblings = childrenByCode.get(permission.parentCode) ?? [];
+    siblings.push(permission);
+    childrenByCode.set(permission.parentCode, siblings);
+  });
+
+  return {
+    permissions,
+    byCode,
+    childrenByCode
+  };
+}
+
+function collectPermissionDescendantCodes(
+  rootCode: string,
+  childrenByCode: PermissionCatalog['childrenByCode']
+): string[] {
+  const descendants: string[] = [];
+  const queue = [...(childrenByCode.get(rootCode) ?? [])];
+
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current) {
+      continue;
+    }
+
+    descendants.push(current.code);
+    queue.push(...(childrenByCode.get(current.code) ?? []));
+  }
+
+  return descendants;
+}
+
+function resolvePermissionMutationContext(
+  catalog: PermissionCatalog,
+  input: PermissionMutationInput,
+  options: {
+    currentPermission?: PermissionSummary;
+  } = {}
+) {
+  const normalizedParentCode = normalizePermissionCode(input.parentCode);
+  if (!normalizedParentCode) {
+    throw new PlatformMutationError('请选择上级菜单。');
+  }
+
+  const parentPermission = catalog.byCode.get(normalizedParentCode);
+  if (!parentPermission) {
+    throw new PlatformMutationError('上级菜单不存在或已被删除。', 404);
+  }
+
+  if (parentPermission.scope !== 'workspace') {
+    throw new PlatformMutationError('当前仅支持维护工作区权限树。', 400);
+  }
+
+  if (parentPermission.permissionType !== 'menu') {
+    throw new PlatformMutationError('上级节点必须是菜单权限。', 400);
+  }
+
+  const identity = parsePermissionIdentity(input.code, input.permissionType);
+
+  if (identity.code === parentPermission.code) {
+    throw new PlatformMutationError(
+      '当前节点不能和上级菜单使用同一个权限编码。',
+      400
+    );
+  }
+
+  if (!identity.code.startsWith(`${parentPermission.module}.`)) {
+    throw new PlatformMutationError(
+      '权限编码必须挂在上级菜单编码路径下，和目录树保持一致。'
+    );
+  }
+
+  if (options.currentPermission) {
+    const descendantCodes = collectPermissionDescendantCodes(
+      options.currentPermission.code,
+      catalog.childrenByCode
+    );
+
+    if (descendantCodes.includes(parentPermission.code)) {
+      throw new PlatformMutationError(
+        '上级菜单不能选择当前节点的下级节点。',
+        400
+      );
+    }
+  }
+
+  const route =
+    input.permissionType === 'menu'
+      ? normalizeRouteInput(input.route)
+      : (parentPermission.route ?? null);
+
+  if (input.permissionType === 'menu' && !route) {
+    throw new PlatformMutationError('菜单权限必须配置可访问路由。', 400);
+  }
+
+  return {
+    ...identity,
+    parentPermission,
+    route,
+    scope: parentPermission.scope,
+    sortOrder: normalizeSortOrder(input.sortOrder)
+  };
 }
 
 async function getWorkspaceRecord(workspaceId: string) {
@@ -1227,35 +1425,26 @@ export async function deleteRole(
 
 export async function createPermission(
   actorId: string,
-  input: {
-    code: string;
-    name: string;
-    module: string;
-    action: string;
-    description?: string | null;
-  }
+  input: PermissionMutationInput
 ) {
   const database = requireDatabase();
-  const moduleName = slugify(input.module).replace(/-/g, '_');
-  const actionName = slugify(input.action).replace(/-/g, '_');
-  const code =
-    normalizeNullable(input.code)?.toLowerCase() ??
-    `${moduleName}.${actionName}`;
+  const catalog = await getPermissionCatalog();
+  const nextPermission = resolvePermissionMutationContext(catalog, input);
 
-  await ensurePermissionCodeAvailable(code);
+  await ensurePermissionCodeAvailable(nextPermission.code);
 
   const [createdPermission] = await database
     .insert(schema.permissions)
     .values({
-      code,
+      code: nextPermission.code,
       name: input.name.trim(),
-      module: moduleName,
-      action: actionName,
-      scope: 'workspace',
-      permissionType: 'action',
-      parentCode: null,
-      route: null,
-      sortOrder: 0,
+      module: nextPermission.module,
+      action: nextPermission.action,
+      scope: nextPermission.scope,
+      permissionType: input.permissionType,
+      parentCode: nextPermission.parentPermission.code,
+      route: nextPermission.route,
+      sortOrder: nextPermission.sortOrder,
       isSystem: false,
       description: normalizeNullable(input.description)
     })
@@ -1266,11 +1455,14 @@ export async function createPermission(
     action: 'permission.create',
     entityType: 'permission',
     entityId: createdPermission.id,
-    summary: `创建了权限 ${code}。`,
+    summary: `创建了权限 ${nextPermission.code}。`,
     metadata: {
-      code,
-      module: moduleName,
-      action: actionName
+      code: nextPermission.code,
+      module: nextPermission.module,
+      action: nextPermission.action,
+      permissionType: input.permissionType,
+      parentCode: nextPermission.parentPermission.code,
+      route: nextPermission.route
     }
   });
 
@@ -1280,46 +1472,81 @@ export async function createPermission(
 export async function updatePermission(
   permissionId: string,
   actorId: string,
-  input: {
-    code: string;
-    name: string;
-    module: string;
-    action: string;
-    description?: string | null;
-  }
+  input: PermissionMutationInput
 ) {
   const database = requireDatabase();
   const permission = await getPermissionSummaryById(permissionId);
+  const catalog = await getPermissionCatalog();
+  const childPermissions = catalog.childrenByCode.get(permission.code) ?? [];
 
   if (permission.isSystem) {
     throw new PlatformMutationError('系统内置权限不允许手动编辑。', 400);
   }
 
-  const moduleName = slugify(input.module).replace(/-/g, '_');
-  const actionName = slugify(input.action).replace(/-/g, '_');
-  const code =
-    normalizeNullable(input.code)?.toLowerCase() ??
-    `${moduleName}.${actionName}`;
+  if (childPermissions.length && input.permissionType !== 'menu') {
+    throw new PlatformMutationError(
+      '存在下级节点的权限只能保持为菜单类型。',
+      400
+    );
+  }
 
-  await ensurePermissionCodeAvailable(code, permissionId);
+  const nextPermission = resolvePermissionMutationContext(catalog, input, {
+    currentPermission: permission
+  });
+
+  await ensurePermissionCodeAvailable(nextPermission.code, permissionId);
 
   await database
     .update(schema.permissions)
     .set({
-      code,
+      code: nextPermission.code,
       name: input.name.trim(),
-      module: moduleName,
-      action: actionName,
-      scope: permission.scope,
-      permissionType: permission.permissionType,
-      parentCode: permission.parentCode ?? null,
-      route: permission.route ?? null,
-      sortOrder: permission.sortOrder,
+      module: nextPermission.module,
+      action: nextPermission.action,
+      scope: nextPermission.scope,
+      permissionType: input.permissionType,
+      parentCode: nextPermission.parentPermission.code,
+      route: nextPermission.route,
+      sortOrder: nextPermission.sortOrder,
       isSystem: permission.isSystem,
       description: normalizeNullable(input.description),
       updatedAt: new Date()
     })
     .where(eq(schema.permissions.id, permissionId));
+
+  if (permission.code !== nextPermission.code) {
+    await database
+      .update(schema.permissions)
+      .set({
+        parentCode: nextPermission.code,
+        updatedAt: new Date()
+      })
+      .where(eq(schema.permissions.parentCode, permission.code));
+  }
+
+  if (
+    input.permissionType === 'menu' &&
+    permission.route !== nextPermission.route &&
+    childPermissions.length
+  ) {
+    await database
+      .update(schema.permissions)
+      .set({
+        route: nextPermission.route,
+        updatedAt: new Date()
+      })
+      .where(
+        and(
+          eq(
+            schema.permissions.parentCode,
+            permission.code !== nextPermission.code
+              ? nextPermission.code
+              : permission.code
+          ),
+          eq(schema.permissions.permissionType, 'action')
+        )
+      );
+  }
 
   await recordAuditLog({
     actorId,
@@ -1328,9 +1555,12 @@ export async function updatePermission(
     entityId: permissionId,
     summary: `更新了权限 ${permission.code}。`,
     metadata: {
-      code,
-      module: moduleName,
-      action: actionName
+      code: nextPermission.code,
+      module: nextPermission.module,
+      action: nextPermission.action,
+      permissionType: input.permissionType,
+      parentCode: nextPermission.parentPermission.code,
+      route: nextPermission.route
     }
   });
 
@@ -1340,23 +1570,43 @@ export async function updatePermission(
 export async function deletePermission(permissionId: string, actorId: string) {
   const database = requireDatabase();
   const permission = await getPermissionSummaryById(permissionId);
+  const catalog = await getPermissionCatalog();
 
   if (permission.isSystem) {
     throw new PlatformMutationError('系统内置权限不允许删除。', 400);
   }
 
-  await database
-    .delete(schema.permissions)
-    .where(eq(schema.permissions.id, permissionId));
+  const subtreeCodes = [
+    permission.code,
+    ...collectPermissionDescendantCodes(permission.code, catalog.childrenByCode)
+  ];
+  const subtreePermissions = catalog.permissions.filter((item) =>
+    subtreeCodes.includes(item.code)
+  );
+
+  if (subtreePermissions.some((item) => item.isSystem)) {
+    throw new PlatformMutationError(
+      '当前节点下存在系统内置权限，不能整树删除。',
+      400
+    );
+  }
+
+  await database.delete(schema.permissions).where(
+    inArray(
+      schema.permissions.id,
+      subtreePermissions.map((item) => item.id)
+    )
+  );
 
   await recordAuditLog({
     actorId,
     action: 'permission.delete',
     entityType: 'permission',
     entityId: permissionId,
-    summary: `删除了权限 ${permission.code}。`,
+    summary: `删除了权限 ${permission.code} 及其下级节点。`,
     metadata: {
-      code: permission.code
+      code: permission.code,
+      deletedCodes: subtreeCodes
     }
   });
 

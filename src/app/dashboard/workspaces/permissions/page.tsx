@@ -4,7 +4,10 @@ import { hasPermission } from '@/lib/auth/permission';
 import { requirePagePermission } from '@/lib/auth/session';
 import { getActiveWorkspaceCookie } from '@/lib/auth/workspace';
 import { actionPermissionCode, menuPermissionCode } from '@/lib/platform/rbac';
-import { listPermissionsPage } from '@/lib/platform/service';
+import {
+  listPermissionMenuOptions,
+  listPermissionTree
+} from '@/lib/platform/service';
 
 export default async function PermissionsPage() {
   const cookieWorkspaceId = await getActiveWorkspaceCookie();
@@ -14,16 +17,20 @@ export default async function PermissionsPage() {
   );
   const activeWorkspaceId =
     cookieWorkspaceId || session.user.defaultWorkspaceId || undefined;
-  const { items, pagination } = await listPermissionsPage();
+  const [permissionTree, menuOptions] = await Promise.all([
+    listPermissionTree('workspace'),
+    listPermissionMenuOptions('workspace')
+  ]);
 
   return (
     <PageContainer
       pageTitle='权限管理'
-      pageDescription='权限粒度已经下沉到按钮级，可直接维护编码、模块和动作。'
+      pageDescription='权限树按菜单目录和页面动作展开，可在这里维护最小功能权限。'
     >
       <PermissionsManagementClient
-        initialPermissions={items}
-        initialPagination={pagination}
+        key={activeWorkspaceId ?? 'no-workspace'}
+        initialPermissionTree={permissionTree}
+        menuOptions={menuOptions}
         workspaceId={activeWorkspaceId}
         access={{
           canCreate: hasPermission(

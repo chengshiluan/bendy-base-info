@@ -31,13 +31,13 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { useDebounce } from '@/hooks/use-debounce';
 import type {
-  OptionItem,
   PaginationMeta,
+  PermissionTreeNode,
   RoleSummary
 } from '@/lib/platform/types';
 import { ConfirmActionDialog } from './confirm-action-dialog';
 import { ManagementPagination } from './management-pagination';
-import { OptionCheckboxGroup } from './option-checkbox-group';
+import { PermissionTreeSelector } from './permission-tree-selector';
 import {
   buildPathWithQuery,
   getErrorMessage,
@@ -48,7 +48,7 @@ interface RolesManagementClientProps {
   initialRoles: RoleSummary[];
   initialPagination: PaginationMeta;
   workspaceId?: string;
-  permissionOptions: OptionItem[];
+  permissionTree: PermissionTreeNode[];
   access: {
     canCreate: boolean;
     canUpdate: boolean;
@@ -76,7 +76,7 @@ export function RolesManagementClient({
   initialRoles,
   initialPagination,
   workspaceId,
-  permissionOptions,
+  permissionTree,
   access
 }: RolesManagementClientProps) {
   const [roles, setRoles] = useState(initialRoles);
@@ -429,13 +429,12 @@ export function RolesManagementClient({
               </div>
               <div className='grid gap-2'>
                 <label className='text-sm font-medium'>绑定权限</label>
-                <OptionCheckboxGroup
-                  options={permissionOptions}
+                <PermissionTreeSelector
+                  tree={permissionTree}
                   value={form.permissionIds}
                   onChange={(permissionIds) =>
                     setForm((current) => ({ ...current, permissionIds }))
                   }
-                  emptyLabel='当前还没有可绑定的权限。'
                 />
               </div>
               <DialogFooter>

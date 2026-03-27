@@ -3,11 +3,8 @@ import { RolesManagementClient } from '@/features/management/components/roles-ma
 import { hasPermission } from '@/lib/auth/permission';
 import { requirePagePermission } from '@/lib/auth/session';
 import { getActiveWorkspaceCookie } from '@/lib/auth/workspace';
-import { listPermissionOptions, listRolesPage } from '@/lib/platform/service';
-import {
-  actionPermissionCode,
-  menuPermissionCode
-} from '@/lib/platform/rbac';
+import { listPermissionTree, listRolesPage } from '@/lib/platform/service';
+import { actionPermissionCode, menuPermissionCode } from '@/lib/platform/rbac';
 
 export default async function RolesPage() {
   const cookieWorkspaceId = await getActiveWorkspaceCookie();
@@ -23,10 +20,10 @@ export default async function RolesPage() {
     total: 0,
     totalPages: 1
   };
-  const [{ items, pagination }, permissionOptions] = activeWorkspaceId
+  const [{ items, pagination }, permissionTree] = activeWorkspaceId
     ? await Promise.all([
         listRolesPage({ workspaceId: activeWorkspaceId }),
-        listPermissionOptions('workspace')
+        listPermissionTree('workspace')
       ])
     : [{ items: [], pagination: emptyPagination }, []];
 
@@ -40,36 +37,21 @@ export default async function RolesPage() {
         initialRoles={items}
         initialPagination={pagination}
         workspaceId={activeWorkspaceId}
-        permissionOptions={permissionOptions}
+        permissionTree={permissionTree}
         access={{
           canCreate: hasPermission(
             session.user,
-            actionPermissionCode(
-              'create',
-              'dashboard',
-              'workspaces',
-              'roles'
-            ),
+            actionPermissionCode('create', 'dashboard', 'workspaces', 'roles'),
             activeWorkspaceId
           ),
           canUpdate: hasPermission(
             session.user,
-            actionPermissionCode(
-              'update',
-              'dashboard',
-              'workspaces',
-              'roles'
-            ),
+            actionPermissionCode('update', 'dashboard', 'workspaces', 'roles'),
             activeWorkspaceId
           ),
           canDelete: hasPermission(
             session.user,
-            actionPermissionCode(
-              'delete',
-              'dashboard',
-              'workspaces',
-              'roles'
-            ),
+            actionPermissionCode('delete', 'dashboard', 'workspaces', 'roles'),
             activeWorkspaceId
           )
         }}

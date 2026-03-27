@@ -61,6 +61,18 @@ export interface PermissionSummary {
   description?: string | null;
 }
 
+export interface PermissionTreeNode extends PermissionSummary {
+  children: PermissionTreeNode[];
+}
+
+export interface PermissionMenuOption {
+  value: string;
+  label: string;
+  depth: number;
+  scope: PermissionSummary['scope'];
+  route?: string | null;
+}
+
 export interface NotificationSummary {
   id: string;
   workspaceId: string | null;

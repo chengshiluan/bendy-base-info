@@ -1,6 +1,10 @@
 import { and, asc, count, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { db, schema } from '@/lib/db';
 import { getPermissionSeed } from './rbac';
+import {
+  buildPermissionMenuOptions,
+  buildPermissionTree
+} from './permission-tree';
 import { paginateItems } from './pagination';
 import {
   demoAuditLogs,
@@ -20,7 +24,9 @@ import type {
   NotificationSummary,
   OptionItem,
   PaginatedResult,
+  PermissionMenuOption,
   PermissionSummary,
+  PermissionTreeNode,
   RoleSummary,
   TeamSummary,
   TicketCommentSummary,
@@ -171,9 +177,27 @@ export async function listPermissionOptions(
   return permissions
     .filter((permission) => scope === 'all' || permission.scope === scope)
     .map((permission) => ({
-    label: `${permission.pathLabel} (${permission.code})`,
-    value: permission.id
+      label: `${permission.pathLabel} (${permission.code})`,
+      value: permission.id
     }));
+}
+
+export async function listPermissionTree(
+  scope: PermissionSummary['scope'] | 'all' = 'all'
+): Promise<PermissionTreeNode[]> {
+  const permissions = await listPermissions();
+  const visiblePermissions = permissions.filter(
+    (permission) => scope === 'all' || permission.scope === scope
+  );
+
+  return buildPermissionTree(visiblePermissions);
+}
+
+export async function listPermissionMenuOptions(
+  scope: PermissionSummary['scope'] | 'all' = 'all'
+): Promise<PermissionMenuOption[]> {
+  const permissionTree = await listPermissionTree(scope);
+  return buildPermissionMenuOptions(permissionTree);
 }
 
 export async function getDashboardMetrics() {
