@@ -25,6 +25,7 @@ interface BootstrapResult {
 let initializationPromise: Promise<void> | null = null;
 
 const legacyPermissionReplacementCodeMap = {
+  'dashboard.view': [menuPermissionCode('dashboard', 'overview')],
   'files.upload': [
     actionPermissionCode('upload', 'dashboard', 'workspaces', 'tickets')
   ],
@@ -52,6 +53,8 @@ const legacyPermissionReplacementCodeMap = {
   'permissions.view': [
     menuPermissionCode('dashboard', 'workspaces', 'permissions')
   ],
+  'profile.update': [actionPermissionCode('update', 'dashboard', 'profile')],
+  'profile.view': [menuPermissionCode('dashboard', 'profile')],
   'roles.manage': [
     actionPermissionCode('create', 'dashboard', 'workspaces', 'roles'),
     actionPermissionCode('update', 'dashboard', 'workspaces', 'roles'),
@@ -88,22 +91,23 @@ const legacyPermissionReplacementCodeMap = {
     actionPermissionCode('update', 'dashboard', 'workspaces', 'users'),
     actionPermissionCode('delete', 'dashboard', 'workspaces', 'users')
   ],
-  'users.view': [menuPermissionCode('dashboard', 'workspaces', 'users')]
+  'users.view': [menuPermissionCode('dashboard', 'workspaces', 'users')],
+  'workspaces.manage': [
+    actionPermissionCode('create', 'dashboard', 'workspaces'),
+    actionPermissionCode('update', 'dashboard', 'workspaces'),
+    actionPermissionCode('archive', 'dashboard', 'workspaces')
+  ],
+  'workspaces.view': [menuPermissionCode('dashboard', 'workspaces')]
 } as const satisfies Record<string, string[]>;
 
 const legacyPermissionCodesToDelete = [
   'audit_logs.view',
-  'dashboard.view',
   'files.view',
-  'profile.update',
-  'profile.view',
-  'workspaces.manage',
   'workspaces.switch',
-  'workspaces.view',
   ...Object.keys(legacyPermissionReplacementCodeMap)
 ];
 
-function expandWorkspaceReplacementCodes(codes: string[]) {
+function expandReplacementCodes(codes: string[]) {
   const expanded = new Set<string>();
 
   codes.forEach((code) => {
@@ -111,7 +115,7 @@ function expandWorkspaceReplacementCodes(codes: string[]) {
 
     while (currentCode) {
       const seed = getPermissionSeed(currentCode);
-      if (!seed || seed.scope !== 'workspace' || expanded.has(currentCode)) {
+      if (!seed || expanded.has(currentCode)) {
         break;
       }
 
@@ -1028,7 +1032,7 @@ async function ensureLegacyPermissionCleanup(
     Object.entries(legacyPermissionReplacementCodeMap).map(
       ([legacyCode, replacementCodes]) => [
         legacyCode,
-        expandWorkspaceReplacementCodes([...replacementCodes])
+        expandReplacementCodes([...replacementCodes])
           .map((code) => permissionIdByCode.get(code))
           .filter((permissionId): permissionId is string =>
             Boolean(permissionId)

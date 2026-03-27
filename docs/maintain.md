@@ -36,11 +36,24 @@
 
 ## 最近开发记录
 
+### 2026-03-27 - 顶层旧权限映射修正
+
+- 完成事项：
+  - 修正上一轮对顶层旧权限的归类，确认 `workspaces.manage`、`workspaces.view` 不应被视为纯废弃项，而是应对应当前全局 `dashboard.workspaces.menu` 层级
+  - 同步将 `dashboard.view`、`profile.view`、`profile.update` 一并纳入顶层旧权限映射，统一收口到当前全局菜单 / 动作权限
+  - 调整 `src/lib/db/bootstrap.ts` 的 legacy 权限迁移逻辑，允许向当前全局权限树补齐祖先链，而不再只处理工作区级节点
+- 验证：
+  - 在 Node `24.11.0` 环境执行 `npx tsc --noEmit`，通过
+  - 在 Node `24.11.0` 环境执行 `npm run lint`，通过；保留 2 条既有 `react-hooks/incompatible-library` warning（`src/components/forms/demo-form.tsx`、`src/hooks/use-data-table.ts`）
+  - 在 Node `24.11.0` 环境执行 `npm run build`，通过
+- 后续待办：
+  - 线上如仍存在绑定 `workspaces.manage` / `workspaces.view` 的旧角色数据，部署后会优先迁移到当前全局工作区权限，再删除旧编码
+
 ### 2026-03-27 - 历史未归类权限清理
 
 - 完成事项：
   - 盘点当前库中的“历史未归类权限”后确认，真正需要处理的是 27 条旧模型遗留的扁平动作权限，例如 `teams.view`、`roles.manage`、`tickets.view`、`workspaces.switch`，而不是当前树里的工作区菜单节点
-  - 逐条核对这些旧权限后确认：本地库里不存在仍被角色引用的重复权限，也没有需要补回树结构的漏挂节点；27 条遗留权限全部属于当前模型已废弃的旧扁平编码
+  - 逐条核对这些旧权限后确认：本地库里不存在仍被角色引用的重复权限，也没有需要补回树结构的漏挂节点；其中顶层 `workspaces.*` / `dashboard.*` / `profile.*` 已在后续修正中改为映射到当前全局权限层，其余遗留权限均属于当前模型已废弃的旧扁平编码
   - 在 `src/lib/db/bootstrap.ts` 中补充 legacy 权限迁移与清理逻辑：对仍有明确替代关系的旧权限先映射到当前树形权限，再统一删除旧权限记录
   - 在本地执行一次 `ensureWorkspaceRbacInitialized()`，实际删除 27 条遗留权限，当前库中“历史未归类权限”已清零
 - 验证：
