@@ -10,6 +10,13 @@
 
 ## 当前迭代
 
+### 2026-03-27 - Legacy UUID 兼容补丁
+
+- [x] 确认启动期 `value too long for type character varying(32)` 来自历史 UUID 与用户主键长度冲突
+- [x] 将用户主键和全部用户外键的兼容目标长度从 32 位放宽到 64 位
+- [x] 同步更新数据库初始化 SQL 与维护文档
+- [x] 在符合文档要求的 Node 24 环境完成最小验证并提交推送
+
 ### 2026-03-27 - GitHub 用户 ID 对齐与启动期兜底
 
 - [x] 将 GitHub OAuth、用户写入链路和数据库 schema 统一到 GitHub user ID 主键模型

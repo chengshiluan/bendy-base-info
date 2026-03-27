@@ -85,7 +85,7 @@ exception
 end
 $$`,
   `create table if not exists users (
-    id varchar(32) primary key,
+    id varchar(64) primary key,
     github_username varchar(39) not null,
     github_user_id varchar(32),
     email varchar(255),
@@ -101,7 +101,7 @@ $$`,
     updated_at timestamptz not null default now()
   )`,
   `alter table users
-    add column if not exists id varchar(32),
+    add column if not exists id varchar(64),
     add column if not exists github_username varchar(39),
     add column if not exists github_user_id varchar(32),
     add column if not exists email varchar(255),
@@ -139,14 +139,14 @@ $$`,
   'create unique index if not exists workspaces_slug_idx on workspaces (slug)',
   `create table if not exists workspace_members (
     workspace_id uuid not null references workspaces(id) on delete cascade,
-    user_id varchar(32) not null references users(id) on delete cascade,
+    user_id varchar(64) not null references users(id) on delete cascade,
     is_owner boolean not null default false,
     joined_at timestamptz not null default now(),
     primary key (workspace_id, user_id)
   )`,
   `alter table workspace_members
     add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
-    add column if not exists user_id varchar(32) references users(id) on delete cascade,
+    add column if not exists user_id varchar(64) references users(id) on delete cascade,
     add column if not exists is_owner boolean default false,
     add column if not exists joined_at timestamptz default now()`,
   `create table if not exists teams (
@@ -155,7 +155,7 @@ $$`,
     slug varchar(80) not null,
     name varchar(120) not null,
     description text,
-    lead_user_id varchar(32) references users(id) on delete set null,
+    lead_user_id varchar(64) references users(id) on delete set null,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
   )`,
@@ -165,7 +165,7 @@ $$`,
     add column if not exists slug varchar(80),
     add column if not exists name varchar(120),
     add column if not exists description text,
-    add column if not exists lead_user_id varchar(32) references users(id) on delete set null,
+    add column if not exists lead_user_id varchar(64) references users(id) on delete set null,
     add column if not exists created_at timestamptz default now(),
     add column if not exists updated_at timestamptz default now()`,
   'create unique index if not exists teams_workspace_slug_idx on teams (workspace_id, slug)',
@@ -231,7 +231,7 @@ $$`,
     add column if not exists permission_id uuid references permissions(id) on delete cascade`,
   `create table if not exists workspace_member_roles (
     workspace_id uuid not null references workspaces(id) on delete cascade,
-    user_id varchar(32) not null references users(id) on delete cascade,
+    user_id varchar(64) not null references users(id) on delete cascade,
     role_id uuid not null references roles(id) on delete cascade,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
@@ -239,26 +239,26 @@ $$`,
   )`,
   `alter table workspace_member_roles
     add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
-    add column if not exists user_id varchar(32) references users(id) on delete cascade,
+    add column if not exists user_id varchar(64) references users(id) on delete cascade,
     add column if not exists role_id uuid references roles(id) on delete cascade,
     add column if not exists created_at timestamptz default now(),
     add column if not exists updated_at timestamptz default now()`,
   `create table if not exists team_members (
     team_id uuid not null references teams(id) on delete cascade,
-    user_id varchar(32) not null references users(id) on delete cascade,
+    user_id varchar(64) not null references users(id) on delete cascade,
     role_id uuid references roles(id) on delete set null,
     joined_at timestamptz not null default now(),
     primary key (team_id, user_id)
   )`,
   `alter table team_members
     add column if not exists team_id uuid references teams(id) on delete cascade,
-    add column if not exists user_id varchar(32) references users(id) on delete cascade,
+    add column if not exists user_id varchar(64) references users(id) on delete cascade,
     add column if not exists role_id uuid references roles(id) on delete set null,
     add column if not exists joined_at timestamptz default now()`,
   `create table if not exists notifications (
     id uuid primary key default gen_random_uuid(),
     workspace_id uuid references workspaces(id) on delete cascade,
-    user_id varchar(32) references users(id) on delete cascade,
+    user_id varchar(64) references users(id) on delete cascade,
     title varchar(160) not null,
     content text not null,
     level notification_level not null default 'info',
@@ -269,7 +269,7 @@ $$`,
   `alter table notifications
     add column if not exists id uuid default gen_random_uuid(),
     add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
-    add column if not exists user_id varchar(32) references users(id) on delete cascade,
+    add column if not exists user_id varchar(64) references users(id) on delete cascade,
     add column if not exists title varchar(160),
     add column if not exists content text,
     add column if not exists level notification_level default 'info',
@@ -284,8 +284,8 @@ $$`,
     description text,
     status ticket_status not null default 'open',
     priority ticket_priority not null default 'medium',
-    reporter_id varchar(32) references users(id) on delete set null,
-    assignee_id varchar(32) references users(id) on delete set null,
+    reporter_id varchar(64) references users(id) on delete set null,
+    assignee_id varchar(64) references users(id) on delete set null,
     comment_count integer not null default 0,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
@@ -298,8 +298,8 @@ $$`,
     add column if not exists description text,
     add column if not exists status ticket_status default 'open',
     add column if not exists priority ticket_priority default 'medium',
-    add column if not exists reporter_id varchar(32) references users(id) on delete set null,
-    add column if not exists assignee_id varchar(32) references users(id) on delete set null,
+    add column if not exists reporter_id varchar(64) references users(id) on delete set null,
+    add column if not exists assignee_id varchar(64) references users(id) on delete set null,
     add column if not exists comment_count integer default 0,
     add column if not exists created_at timestamptz default now(),
     add column if not exists updated_at timestamptz default now()`,
@@ -307,7 +307,7 @@ $$`,
   `create table if not exists ticket_comments (
     id uuid primary key default gen_random_uuid(),
     ticket_id uuid not null references tickets(id) on delete cascade,
-    author_id varchar(32) references users(id) on delete set null,
+    author_id varchar(64) references users(id) on delete set null,
     body text not null,
     attachment_ids jsonb not null default '[]'::jsonb,
     created_at timestamptz not null default now(),
@@ -316,7 +316,7 @@ $$`,
   `alter table ticket_comments
     add column if not exists id uuid default gen_random_uuid(),
     add column if not exists ticket_id uuid references tickets(id) on delete cascade,
-    add column if not exists author_id varchar(32) references users(id) on delete set null,
+    add column if not exists author_id varchar(64) references users(id) on delete set null,
     add column if not exists body text,
     add column if not exists attachment_ids jsonb default '[]'::jsonb,
     add column if not exists created_at timestamptz default now(),
@@ -332,7 +332,7 @@ $$`,
     mime_type varchar(120),
     size integer not null default 0,
     public_url text,
-    uploaded_by varchar(32) references users(id) on delete set null,
+    uploaded_by varchar(64) references users(id) on delete set null,
     created_at timestamptz not null default now()
   )`,
   `alter table file_assets
@@ -346,12 +346,12 @@ $$`,
     add column if not exists mime_type varchar(120),
     add column if not exists size integer default 0,
     add column if not exists public_url text,
-    add column if not exists uploaded_by varchar(32) references users(id) on delete set null,
+    add column if not exists uploaded_by varchar(64) references users(id) on delete set null,
     add column if not exists created_at timestamptz default now()`,
   `create table if not exists audit_logs (
     id uuid primary key default gen_random_uuid(),
     workspace_id uuid references workspaces(id) on delete set null,
-    actor_id varchar(32) references users(id) on delete set null,
+    actor_id varchar(64) references users(id) on delete set null,
     action varchar(120) not null,
     entity_type varchar(80) not null,
     entity_id varchar(120),
@@ -362,7 +362,7 @@ $$`,
   `alter table audit_logs
     add column if not exists id uuid default gen_random_uuid(),
     add column if not exists workspace_id uuid references workspaces(id) on delete set null,
-    add column if not exists actor_id varchar(32) references users(id) on delete set null,
+    add column if not exists actor_id varchar(64) references users(id) on delete set null,
     add column if not exists action varchar(120),
     add column if not exists entity_type varchar(80),
     add column if not exists entity_id varchar(120),
@@ -656,7 +656,7 @@ export async function ensureGithubBackedUserIds() {
   if (usersIdType !== 'character varying') {
     await sql.query(`
       alter table users
-      alter column id type varchar(32)
+      alter column id type varchar(64)
       using coalesce(github_user_id, legacy_user_id, id::text)
     `);
   }
@@ -682,7 +682,7 @@ export async function ensureGithubBackedUserIds() {
 
     await sql.query(`
       alter table ${quoteSqlIdentifier(table)}
-      alter column ${quoteSqlIdentifier(column)} type varchar(32)
+      alter column ${quoteSqlIdentifier(column)} type varchar(64)
       using ${quoteSqlIdentifier(column)}::text
     `);
   }

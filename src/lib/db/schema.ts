@@ -76,7 +76,7 @@ const timestamps = {
 export const users = pgTable(
   'users',
   {
-    id: varchar('id', { length: 32 }).primaryKey(),
+    id: varchar('id', { length: 64 }).primaryKey(),
     githubUsername: varchar('github_username', { length: 39 }).notNull(),
     githubUserId: varchar('github_user_id', { length: 32 }),
     email: varchar('email', { length: 255 }),
@@ -120,7 +120,7 @@ export const workspaceMembers = pgTable(
     workspaceId: uuid('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
-    userId: varchar('user_id', { length: 32 })
+    userId: varchar('user_id', { length: 64 })
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     isOwner: boolean('is_owner').default(false).notNull(),
@@ -143,7 +143,7 @@ export const teams = pgTable(
     slug: varchar('slug', { length: 80 }).notNull(),
     name: varchar('name', { length: 120 }).notNull(),
     description: text('description'),
-    leadUserId: varchar('lead_user_id', { length: 32 }).references(
+    leadUserId: varchar('lead_user_id', { length: 64 }).references(
       () => users.id,
       {
         onDelete: 'set null'
@@ -225,7 +225,7 @@ export const workspaceMemberRoles = pgTable(
     workspaceId: uuid('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
-    userId: varchar('user_id', { length: 32 })
+    userId: varchar('user_id', { length: 64 })
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     roleId: uuid('role_id')
@@ -246,7 +246,7 @@ export const teamMembers = pgTable(
     teamId: uuid('team_id')
       .notNull()
       .references(() => teams.id, { onDelete: 'cascade' }),
-    userId: varchar('user_id', { length: 32 })
+    userId: varchar('user_id', { length: 64 })
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     roleId: uuid('role_id').references(() => roles.id, {
@@ -266,7 +266,7 @@ export const notifications = pgTable('notifications', {
   workspaceId: uuid('workspace_id').references(() => workspaces.id, {
     onDelete: 'cascade'
   }),
-  userId: varchar('user_id', { length: 32 }).references(() => users.id, {
+  userId: varchar('user_id', { length: 64 }).references(() => users.id, {
     onDelete: 'cascade'
   }),
   title: varchar('title', { length: 160 }).notNull(),
@@ -288,13 +288,13 @@ export const tickets = pgTable(
     description: text('description'),
     status: ticketStatusEnum('status').default('open').notNull(),
     priority: ticketPriorityEnum('priority').default('medium').notNull(),
-    reporterId: varchar('reporter_id', { length: 32 }).references(
+    reporterId: varchar('reporter_id', { length: 64 }).references(
       () => users.id,
       {
         onDelete: 'set null'
       }
     ),
-    assigneeId: varchar('assignee_id', { length: 32 }).references(
+    assigneeId: varchar('assignee_id', { length: 64 }).references(
       () => users.id,
       {
         onDelete: 'set null'
@@ -313,7 +313,7 @@ export const ticketComments = pgTable('ticket_comments', {
   ticketId: uuid('ticket_id')
     .notNull()
     .references(() => tickets.id, { onDelete: 'cascade' }),
-  authorId: varchar('author_id', { length: 32 }).references(() => users.id, {
+  authorId: varchar('author_id', { length: 64 }).references(() => users.id, {
     onDelete: 'set null'
   }),
   body: text('body').notNull(),
@@ -337,7 +337,7 @@ export const fileAssets = pgTable('file_assets', {
   mimeType: varchar('mime_type', { length: 120 }),
   size: integer('size').default(0).notNull(),
   publicUrl: text('public_url'),
-  uploadedBy: varchar('uploaded_by', { length: 32 }).references(
+  uploadedBy: varchar('uploaded_by', { length: 64 }).references(
     () => users.id,
     {
       onDelete: 'set null'
@@ -353,7 +353,7 @@ export const auditLogs = pgTable('audit_logs', {
   workspaceId: uuid('workspace_id').references(() => workspaces.id, {
     onDelete: 'set null'
   }),
-  actorId: varchar('actor_id', { length: 32 }).references(() => users.id, {
+  actorId: varchar('actor_id', { length: 64 }).references(() => users.id, {
     onDelete: 'set null'
   }),
   action: varchar('action', { length: 120 }).notNull(),

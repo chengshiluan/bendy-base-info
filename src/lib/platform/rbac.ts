@@ -417,12 +417,12 @@ function flattenPermissionTree(
     const segments = [...parentSegments, node.key];
     const titles = [...parentTitles, node.title];
     const menuCode = menuPermissionCode(...segments);
-    const module = segments.join('.');
+    const permissionModule = segments.join('.');
     const menuSortOrder = orderPrefix + (index + 1) * 100;
 
     permissions.push({
       code: menuCode,
-      module,
+      module: permissionModule,
       action: 'menu',
       name: `${node.title}菜单`,
       description: node.description,
@@ -438,7 +438,7 @@ function flattenPermissionTree(
     const actionPermissions = (node.actions ?? []).map(
       (action, actionIndex) => ({
         code: actionPermissionCode(action.key, ...segments),
-        module,
+        module: permissionModule,
         action: action.key,
         name: action.title,
         description: action.description,

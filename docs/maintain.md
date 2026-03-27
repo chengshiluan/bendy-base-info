@@ -36,6 +36,21 @@
 
 ## 最近开发记录
 
+### 2026-03-27 - Legacy UUID 兼容补丁
+
+- 完成事项：
+  - 定位启动期 `value too long for type character varying(32)` 的直接原因是历史 `users.id` / 用户外键仍为 UUID 文本 36 位，迁移时被强制改为 `varchar(32)`
+  - 将 `users.id` 以及所有引用用户主键的外键兼容长度统一放宽到 `varchar(64)`，允许 legacy UUID 与 GitHub 数字 ID 共存迁移
+  - 同步更新 `src/lib/db/schema.ts`、`src/lib/db/bootstrap.ts` 与 `docs/database-init.sql`
+  - 顺手修复 `src/lib/platform/rbac.ts` 中 `module` 变量名触发的 lint / TypeScript 问题，恢复 Node 24 环境下的最小检查
+- 验证：
+  - 在 Node `24.11.0` 环境执行 `npx tsc --noEmit`，通过
+  - 在 Node `24.11.0` 环境执行 `npm run lint`，通过；保留 2 条既有 `react-hooks/incompatible-library` warning（`src/components/forms/demo-form.tsx`、`src/hooks/use-data-table.ts`）
+  - 在 Node `24.11.0` 环境执行 `npm run build`，通过
+- 后续待办：
+  - 部署后观察 instrumentation bootstrap 是否消失
+  - 验证历史 UUID 用户、已对齐 GitHub ID 用户、仅邮箱登录用户三类数据都能正常通过认证与权限查询
+
 ### 2026-03-27 - GitHub 用户 ID 对齐与启动期 bootstrap 修复
 
 - 完成事项：
