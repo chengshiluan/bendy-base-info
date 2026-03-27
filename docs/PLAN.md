@@ -15,7 +15,7 @@
 - [x] 确认工作区权限树断层的直接原因，并统一角色页、权限页与权限接口的数据来源
 - [x] 修正带虚拟祖先节点时的权限勾选逻辑，避免提交无效权限 ID
 - [x] 完成最小验证，并同步更新 `docs/maintain.md`
-- [ ] 按协作要求完成 `git commit` 与 `git push origin <current-branch>`
+- [x] 按协作要求完成 `git commit` 与 `git push origin <current-branch>`
 
 ### 2026-03-27 - 角色权限树与遗留权限收口
 
