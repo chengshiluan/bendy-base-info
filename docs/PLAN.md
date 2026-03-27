@@ -16,7 +16,7 @@
 - [x] 对重复权限做合并迁移、对漏挂权限补回树位置、对无用权限做安全清理
 - [x] 补齐启动期权限同步，避免历史未归类权限再次污染角色权限树
 - [x] 完成最小验证，并同步更新 `docs/maintain.md`
-- [ ] 按协作要求完成 `git commit` 与 `git push origin <current-branch>`
+- [x] 按协作要求完成 `git commit` 与 `git push origin <current-branch>`
 
 ### 2026-03-27 - 工作区权限树断层修复
 
