@@ -36,6 +36,23 @@
 
 ## 最近开发记录
 
+### 2026-03-27 - GitHub 用户 ID 对齐与启动期 bootstrap 修复
+
+- 完成事项：
+  - 将 GitHub OAuth、管理后台新增/导入/更新用户、数据库 schema 统一到 GitHub `user.id` 主键模型
+  - 为旧库补充用户主键与关联外键从 UUID 向 GitHub user ID 的兼容迁移逻辑
+  - 修复启动期 bootstrap 中对 UUID 类型 `users.id` 直接做正则判断导致的 `operator does not exist: uuid ~ unknown`
+  - 为 instrumentation 中的数据库初始化增加容错，避免 bootstrap 失败直接导致服务启动 500
+  - 按协作文档要求补充 `docs/PLAN.md`、`docs/auth-infra.md`、`docs/database-init.sql`、`docs/local-bootstrap.sql`
+- 验证：
+  - 执行 `npx tsc --noEmit`，通过
+  - 执行 `npm run lint`，失败；当前环境为 Node `v16.20.2`，ESLint 配置加载阶段报 `structuredClone is not defined`
+  - 执行 `npm run build`，失败；Next.js 16 要求 Node `>=20.9.0`，当前环境为 Node `v16.20.2`
+- 后续待办：
+  - 在 Node 24 环境重新执行 `npm run lint` 与 `npm run build`
+  - 部署最新提交后，观察首次 GitHub OAuth 登录是否完成旧用户记录对齐
+  - 如线上历史数据存在重复 `github_username` / `github_user_id` 映射，需先清理冲突记录再继续迁移
+
 ### 2026-03-26 - 团队成员 GitHub 搜索添加与版本升级 0.1.3
 
 - 完成事项：

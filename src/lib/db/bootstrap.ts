@@ -609,8 +609,8 @@ export async function ensureGithubBackedUserIds() {
   const rowsNeedingGithubUserIdSync = (await sql.query(`
     select count(*)::int as value
     from users
-    where id ~ '^[0-9]+$'
-      and coalesce(github_user_id, '') <> id
+    where id::text ~ '^[0-9]+$'
+      and coalesce(github_user_id, '') <> id::text
   `)) as Array<{ value: number }>;
 
   const needsTypeMigration =
@@ -668,9 +668,9 @@ export async function ensureGithubBackedUserIds() {
   `);
   await sql.query(`
     update users
-    set github_user_id = id
-    where id ~ '^[0-9]+$'
-      and coalesce(github_user_id, '') <> id
+    set github_user_id = id::text
+    where id::text ~ '^[0-9]+$'
+      and coalesce(github_user_id, '') <> id::text
   `);
 
   for (const { table, column } of existingUserReferenceColumns) {

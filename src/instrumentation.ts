@@ -5,7 +5,11 @@ export async function register() {
     return;
   }
 
-  await ensureDatabaseInitialized();
+  try {
+    await ensureDatabaseInitialized();
+  } catch (error) {
+    console.error('[db:init] instrumentation bootstrap failed', error);
+  }
 }
 
 export async function onRequestError(..._args: unknown[]) {}
