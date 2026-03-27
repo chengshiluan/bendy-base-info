@@ -139,6 +139,8 @@ export function PermissionTreeSelector({
 
   const renderNode = (node: PermissionTreeNode, depth = 0) => {
     const checkedState = getNodeCheckedState(node);
+    const selectablePermissionIds = collectPermissionIds(node);
+    const isSelectable = selectablePermissionIds.length > 0;
     const hasChildren = node.children.length > 0;
     const isExpanded = keyword ? true : expandedSet.has(node.code);
 
@@ -170,6 +172,7 @@ export function PermissionTreeSelector({
           </button>
           <Checkbox
             checked={checkedState}
+            disabled={!isSelectable}
             onCheckedChange={(nextChecked) =>
               applyNodeSelection(node, nextChecked)
             }

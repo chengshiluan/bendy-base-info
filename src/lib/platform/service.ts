@@ -1,6 +1,10 @@
 import { and, asc, count, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { db, schema } from '@/lib/db';
-import { getPermissionSeed } from './rbac';
+import {
+  actionPermissionCode,
+  getPermissionSeed,
+  menuPermissionCode
+} from './rbac';
 import {
   buildPermissionMenuOptions,
   buildPermissionTree
@@ -203,6 +207,31 @@ function createVirtualPermissionSummary(
   };
 }
 
+function createPermissionSummaryFromSeed(
+  code: string
+): PermissionSummary | null {
+  const seed = getPermissionSeed(code);
+  if (!seed) {
+    return null;
+  }
+
+  return {
+    id: `seed:${seed.code}`,
+    module: seed.module,
+    action: seed.action,
+    code: seed.code,
+    name: seed.name,
+    scope: seed.scope,
+    permissionType: seed.permissionType,
+    parentCode: seed.parentCode,
+    route: seed.route,
+    sortOrder: seed.sortOrder,
+    isSystem: seed.isSystem,
+    pathLabel: seed.pathLabel,
+    description: seed.description
+  } satisfies PermissionSummary;
+}
+
 export async function listWorkspacePermissionTree(): Promise<
   PermissionTreeNode[]
 > {
@@ -231,28 +260,7 @@ export async function listWorkspacePermissionTree(): Promise<
 
     const parent =
       permissionByCode.get(parentCode) ??
-      (() => {
-        const seed = getPermissionSeed(parentCode);
-        if (!seed) {
-          return null;
-        }
-
-        return {
-          id: `seed:${seed.code}`,
-          module: seed.module,
-          action: seed.action,
-          code: seed.code,
-          name: seed.name,
-          scope: seed.scope,
-          permissionType: seed.permissionType,
-          parentCode: seed.parentCode,
-          route: seed.route,
-          sortOrder: seed.sortOrder,
-          isSystem: seed.isSystem,
-          pathLabel: seed.pathLabel,
-          description: seed.description
-        } satisfies PermissionSummary;
-      })();
+      createPermissionSummaryFromSeed(parentCode);
 
     if (!parent) {
       return;
@@ -273,7 +281,56 @@ export async function listWorkspacePermissionTree(): Promise<
 }
 
 export async function listRolePermissionTree(): Promise<PermissionTreeNode[]> {
-  return listWorkspacePermissionTree();
+  const permissions = await listPermissions();
+  const workspacePermissions = permissions.filter(
+    (permission) => permission.scope === 'workspace'
+  );
+  const permissionByCode = new Map(
+    permissions.map((permission) => [permission.code, permission] as const)
+  );
+  const visibleByCode = new Map(
+    workspacePermissions.map(
+      (permission) => [permission.code, permission] as const
+    )
+  );
+  const virtualNodes = new Map<string, PermissionSummary>();
+
+  const ensureVisibleChain = (code?: string | null) => {
+    if (!code || visibleByCode.has(code) || virtualNodes.has(code)) {
+      return;
+    }
+
+    const permission =
+      permissionByCode.get(code) ?? createPermissionSummaryFromSeed(code);
+    if (!permission) {
+      return;
+    }
+
+    ensureVisibleChain(permission.parentCode);
+    virtualNodes.set(
+      permission.code,
+      createVirtualPermissionSummary(permission)
+    );
+  };
+
+  workspacePermissions.forEach((permission) => {
+    ensureVisibleChain(permission.parentCode);
+  });
+
+  [
+    menuPermissionCode('dashboard', 'overview'),
+    menuPermissionCode('dashboard', 'workspaces', 'manage'),
+    actionPermissionCode('create', 'dashboard', 'workspaces', 'manage'),
+    actionPermissionCode('update', 'dashboard', 'workspaces', 'manage'),
+    actionPermissionCode('archive', 'dashboard', 'workspaces', 'manage')
+  ].forEach((code) => {
+    ensureVisibleChain(code);
+  });
+
+  return buildPermissionTree([
+    ...workspacePermissions,
+    ...Array.from(virtualNodes.values())
+  ]);
 }
 
 export async function listPermissionMenuOptions(

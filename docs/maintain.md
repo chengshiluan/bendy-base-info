@@ -36,6 +36,20 @@
 
 ## 最近开发记录
 
+### 2026-03-27 - 角色弹窗权限树层级修复
+
+- 完成事项：
+  - 将角色管理页从通用工作区权限树切回专用的 `listRolePermissionTree()`，让编辑角色弹窗使用与权限管理页一致的层级展示模型
+  - 在角色专用权限树中补出 `dashboard.overview.menu` 与 `dashboard.workspaces.manage.*` 这一组仅用于展示层级的虚拟节点，确保 `仪表盘` 与 `管理工作区` 出现在正确位置
+  - 调整 `PermissionTreeSelector`，对没有任何可绑定权限 ID 的纯展示节点禁用勾选，避免把全局展示节点误认为可绑定到工作区角色
+- 验证：
+  - 在 Node `24.11.0` 环境执行 `listRolePermissionTree()` 复查，确认根层包含 `dashboard.overview.menu`，且 `dashboard.workspaces.menu` 下包含 `dashboard.workspaces.manage.menu`
+  - 在 Node `24.11.0` 环境执行 `npx tsc --noEmit`，通过
+  - 在 Node `24.11.0` 环境执行 `npm run lint`，通过；保留 2 条既有 `react-hooks/incompatible-library` warning（`src/components/forms/demo-form.tsx`、`src/hooks/use-data-table.ts`）
+  - 在 Node `24.11.0` 环境执行 `npm run build`，通过
+- 后续待办：
+  - 部署后进入角色管理弹窗，确认 `仪表盘`、`管理工作区` 已出现在树中，且纯展示节点复选框为禁用态
+
 ### 2026-03-27 - 隐藏菜单节点补齐
 
 - 完成事项：
