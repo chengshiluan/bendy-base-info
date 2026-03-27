@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -38,10 +40,12 @@ import {
 } from '@/components/ui/table';
 import { useDebounce } from '@/hooks/use-debounce';
 import type {
+  GithubSearchUser,
   OptionItem,
   PaginationMeta,
   UserSummary
 } from '@/lib/platform/types';
+import { cn } from '@/lib/utils';
 import { ConfirmActionDialog } from './confirm-action-dialog';
 import { ManagementPagination } from './management-pagination';
 import { OptionCheckboxGroup } from './option-checkbox-group';
@@ -86,6 +90,14 @@ function createDefaultForm(): UserFormState {
   };
 }
 
+function normalizeGithubUsername(value: string) {
+  return value.trim().replace(/^@/, '').toLowerCase();
+}
+
+function getGithubInitial(username: string) {
+  return username.slice(0, 1).toUpperCase();
+}
+
 export function UsersManagementClient({
   initialUsers,
   initialPagination,
@@ -106,6 +118,42 @@ export function UsersManagementClient({
   const [editingUser, setEditingUser] = useState<UserSummary | null>(null);
   const [deletingUser, setDeletingUser] = useState<UserSummary | null>(null);
   const [form, setForm] = useState<UserFormState>(createDefaultForm());
+  const [githubSearchResults, setGithubSearchResults] = useState<
+    GithubSearchUser[]
+  >([]);
+  const [githubSearchPending, setGithubSearchPending] = useState(false);
+  const [githubSearchError, setGithubSearchError] = useState<string | null>(
+    null
+  );
+  const normalizedGithubUsername = normalizeGithubUsername(form.githubUsername);
+  const editingGithubUsername = normalizeGithubUsername(
+    editingUser?.githubUsername ?? ''
+  );
+  const shouldSearchGithub =
+    dialogOpen &&
+    normalizedGithubUsername.length >= 2 &&
+    (!editingUser || normalizedGithubUsername !== editingGithubUsername);
+  const debouncedGithubSearchQuery = useDebounce(
+    shouldSearchGithub ? normalizedGithubUsername : '',
+    350
+  );
+  const exactGithubSearchUser =
+    githubSearchResults.find(
+      (user) => user.githubUsername === normalizedGithubUsername
+    ) ?? null;
+
+  function resetGithubSearchState() {
+    setGithubSearchResults([]);
+    setGithubSearchPending(false);
+    setGithubSearchError(null);
+  }
+
+  function closeDialog() {
+    setDialogOpen(false);
+    setEditingUser(null);
+    setForm(createDefaultForm());
+    resetGithubSearchState();
+  }
 
   async function refreshUsers() {
     if (!workspaceId) {
@@ -178,9 +226,60 @@ export function UsersManagementClient({
     };
   }, [debouncedSearch, page, workspaceId]);
 
+  useEffect(() => {
+    if (
+      !workspaceId ||
+      !shouldSearchGithub ||
+      debouncedGithubSearchQuery.length < 2
+    ) {
+      setGithubSearchPending(false);
+      setGithubSearchError(null);
+      setGithubSearchResults([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadGithubUsers() {
+      setGithubSearchPending(true);
+      setGithubSearchError(null);
+
+      try {
+        const data = await requestJson<{ githubUsers: GithubSearchUser[] }>(
+          buildPathWithQuery('/api/admin/users/github-search', {
+            workspaceId,
+            query: debouncedGithubSearchQuery
+          })
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        setGithubSearchResults(data.githubUsers);
+      } catch (error) {
+        if (!cancelled) {
+          setGithubSearchResults([]);
+          setGithubSearchError(getErrorMessage(error));
+        }
+      } finally {
+        if (!cancelled) {
+          setGithubSearchPending(false);
+        }
+      }
+    }
+
+    void loadGithubUsers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedGithubSearchQuery, shouldSearchGithub, workspaceId]);
+
   function openCreateDialog() {
     setEditingUser(null);
     setForm(createDefaultForm());
+    resetGithubSearchState();
     setDialogOpen(true);
   }
 
@@ -195,6 +294,7 @@ export function UsersManagementClient({
       emailLoginEnabled: Boolean(user.emailLoginEnabled),
       roleIds: user.roleIds ?? []
     });
+    resetGithubSearchState();
     setDialogOpen(true);
   }
 
@@ -229,9 +329,7 @@ export function UsersManagementClient({
       }
 
       await refreshUsers();
-      setDialogOpen(false);
-      setForm(createDefaultForm());
-      setEditingUser(null);
+      closeDialog();
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
@@ -400,11 +498,12 @@ export function UsersManagementClient({
       <Dialog
         open={dialogOpen}
         onOpenChange={(open) => {
-          setDialogOpen(open);
           if (!open) {
-            setEditingUser(null);
-            setForm(createDefaultForm());
+            closeDialog();
+            return;
           }
+
+          setDialogOpen(true);
         }}
       >
         <DialogContent>
@@ -429,6 +528,125 @@ export function UsersManagementClient({
                 required
                 maxLength={39}
               />
+              <p className='text-muted-foreground text-xs'>
+                输入至少 2 个字符后会自动搜索 GitHub 用户。保存时会以 GitHub
+                实时资料同步用户名、头像和昵称。
+              </p>
+              {shouldSearchGithub ? (
+                <div className='rounded-md border'>
+                  <div className='flex items-center justify-between gap-3 border-b px-3 py-2'>
+                    <div>
+                      <p className='text-sm font-medium'>GitHub 自动搜索</p>
+                      <p className='text-muted-foreground text-xs'>
+                        点击候选结果可快速确认当前录入的 GitHub 用户。
+                      </p>
+                    </div>
+                    <Badge variant='outline'>
+                      {githubSearchResults.length} 条结果
+                    </Badge>
+                  </div>
+                  {exactGithubSearchUser ? (
+                    <div className='border-b px-3 py-3'>
+                      <div className='bg-primary/5 flex items-center gap-3 rounded-md border px-3 py-3'>
+                        <Avatar className='size-10'>
+                          <AvatarImage
+                            src={exactGithubSearchUser.avatarUrl ?? undefined}
+                            alt={exactGithubSearchUser.githubUsername}
+                          />
+                          <AvatarFallback>
+                            {getGithubInitial(
+                              exactGithubSearchUser.githubUsername
+                            )}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className='min-w-0 flex-1'>
+                          <p className='truncate text-sm font-medium'>
+                            已匹配 GitHub 用户 @
+                            {exactGithubSearchUser.githubUsername}
+                          </p>
+                          <a
+                            href={exactGithubSearchUser.profileUrl}
+                            target='_blank'
+                            rel='noreferrer'
+                            className='text-muted-foreground hover:text-foreground text-xs underline-offset-4 hover:underline'
+                          >
+                            打开 GitHub 主页确认
+                          </a>
+                        </div>
+                        <Badge>完全匹配</Badge>
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className='max-h-56 overflow-y-auto p-3'>
+                    {githubSearchPending ? (
+                      <div className='text-muted-foreground flex items-center justify-center gap-2 py-6 text-sm'>
+                        <Loader2 className='size-4 animate-spin' />
+                        正在搜索 GitHub 用户...
+                      </div>
+                    ) : githubSearchError ? (
+                      <div className='text-destructive py-3 text-sm'>
+                        {githubSearchError}
+                      </div>
+                    ) : githubSearchResults.length ? (
+                      <div className='space-y-2'>
+                        {githubSearchResults.map((user) => {
+                          const matched =
+                            user.githubUsername === normalizedGithubUsername;
+
+                          return (
+                            <button
+                              key={user.githubUserId}
+                              type='button'
+                              className={cn(
+                                'hover:bg-muted/70 flex w-full items-center justify-between gap-3 rounded-md border px-3 py-3 text-left transition-colors',
+                                matched && 'border-primary bg-primary/5'
+                              )}
+                              onClick={() =>
+                                setForm((current) => ({
+                                  ...current,
+                                  githubUsername: user.githubUsername
+                                }))
+                              }
+                            >
+                              <div className='flex min-w-0 items-center gap-3'>
+                                <Avatar className='size-9'>
+                                  <AvatarImage
+                                    src={user.avatarUrl ?? undefined}
+                                    alt={user.githubUsername}
+                                  />
+                                  <AvatarFallback>
+                                    {getGithubInitial(user.githubUsername)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className='min-w-0'>
+                                  <p className='truncate text-sm font-medium'>
+                                    @{user.githubUsername}
+                                  </p>
+                                  <p className='text-muted-foreground text-xs'>
+                                    GitHub 用户 ID {user.githubUserId}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className='flex items-center gap-2'>
+                                {matched ? (
+                                  <Badge>当前输入</Badge>
+                                ) : (
+                                  <Badge variant='outline'>使用此用户</Badge>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className='text-muted-foreground py-3 text-sm'>
+                        暂未搜索到匹配的 GitHub
+                        用户，你也可以继续手动输入，保存时会再次校验。
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </div>
             <div className='grid gap-2 md:grid-cols-2'>
               <div className='grid gap-2'>
@@ -526,11 +744,7 @@ export function UsersManagementClient({
               />
             </div>
             <DialogFooter>
-              <Button
-                type='button'
-                variant='outline'
-                onClick={() => setDialogOpen(false)}
-              >
+              <Button type='button' variant='outline' onClick={closeDialog}>
                 取消
               </Button>
               <Button type='submit' disabled={submitPending}>

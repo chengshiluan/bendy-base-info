@@ -36,6 +36,21 @@
 
 ## 最近开发记录
 
+### 2026-03-27 - 新增用户 GitHub 自动搜索恢复与版本升级 0.1.7
+
+- 完成事项：
+  - 排查确认新增用户弹窗当前没有任何 GitHub 自动搜索逻辑，而 `/api/admin/users/github-search` 在 RBAC 收口后又只允许“团队导入”权限访问，导致用户管理页既没有自动搜索体验，也无法直接复用现有 GitHub 搜索接口
+  - 在 `src/features/management/components/users-management-client.tsx` 为 GitHub 用户名输入补上防抖自动搜索、候选结果回填、完全匹配高亮和统一的弹窗关闭重置逻辑
+  - 调整 `src/app/api/admin/users/github-search/route.ts` 的权限守卫，允许“团队导入”或“用户新增 / 编辑”任一权限命中时访问 GitHub 搜索接口
+  - 将项目版本号升级到 `0.1.7`，并同步更新 `CHANGELOG.md`、`docs/PLAN.md`、`package.json`、`package-lock.json`、`src/lib/app-info.ts`
+- 验证：
+  - 在 Node `24.11.0` 环境执行 `npx tsc --noEmit`，通过
+  - 在 Node `24.11.0` 环境执行 `npm run lint`，通过；保留 2 条既有 `react-hooks/incompatible-library` warning（`src/components/forms/demo-form.tsx`、`src/hooks/use-data-table.ts`）
+  - 在 Node `24.11.0` 环境执行 `npm run build`，通过；保留既有 `baseline-browser-mapping` 过期提示
+- 后续待办：
+  - 部署后进入“用户管理 -> 新增用户”弹窗，确认输入 GitHub 用户名关键字后会自动出现候选结果，且点击候选后可以正常创建用户
+  - 如后续需要把显示名称在前端即时预填，可在现有自动搜索基础上继续增加单用户详情预览接口
+
 ### 2026-03-27 - 角色弹窗权限树层级修复
 
 - 完成事项：
