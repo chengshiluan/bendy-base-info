@@ -72,7 +72,9 @@ npm run db:generate
 
 ```sql
 insert into users (
+  id,
   github_username,
+  github_user_id,
   email,
   display_name,
   system_role,
@@ -80,7 +82,9 @@ insert into users (
   email_login_enabled
 )
 values (
+  '270390664',
   'juzi',
+  '270390664',
   'juzi@example.com',
   '橘色',
   'super_admin',
@@ -88,6 +92,8 @@ values (
   true
 );
 ```
+
+这里的 `id` 直接使用 GitHub 的 user ID，和 `github_user_id` 保持一致。
 
 如果该用户需要进入某个工作区，再补：
 

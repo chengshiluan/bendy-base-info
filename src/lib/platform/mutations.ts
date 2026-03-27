@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, or } from 'drizzle-orm';
 import { ensureWorkspaceRbacInitialized } from '@/lib/db/bootstrap';
 import { db, schema } from '@/lib/db';
 import { slugify } from '@/lib/utils';
@@ -53,6 +53,116 @@ function normalizeNullable(value?: string | null) {
 
 function uniqueValues(values: string[] = []) {
   return Array.from(new Set(values.filter(Boolean)));
+}
+
+type DatabaseClient = NonNullable<typeof db>;
+
+type GithubLinkedUserRecord = {
+  id: string;
+  githubUsername: string;
+  githubUserId: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  bio: string | null;
+  email: string | null;
+  systemRole: 'super_admin' | 'admin' | 'member';
+  status: 'active' | 'invited' | 'disabled';
+  emailLoginEnabled: boolean;
+};
+
+async function loadGithubUserIdentity(githubUsername: string) {
+  try {
+    return await getGithubUserByUsername(githubUsername);
+  } catch (error) {
+    if (error instanceof GithubApiError) {
+      throw new PlatformMutationError(
+        error.status === 404
+          ? `GitHub 用户 @${githubUsername} 不存在。`
+          : error.message,
+        error.status === 404 ? 404 : 502
+      );
+    }
+
+    throw error;
+  }
+}
+
+function isNumericGithubUserId(value: string) {
+  return /^[0-9]+$/.test(value);
+}
+
+function getBoundGithubUserId(user: {
+  id: string;
+  githubUserId: string | null;
+}) {
+  if (user.githubUserId) {
+    return user.githubUserId;
+  }
+
+  return isNumericGithubUserId(user.id) ? user.id : null;
+}
+
+function ensureCompatibleGithubIdentity(
+  user: {
+    id: string;
+    githubUserId: string | null;
+  },
+  githubUserId: string
+) {
+  const boundGithubUserId = getBoundGithubUserId(user);
+
+  if (boundGithubUserId && boundGithubUserId !== githubUserId) {
+    throw new PlatformMutationError(
+      '该用户已经绑定到另一个 GitHub 账号，请删除旧记录后重新导入。',
+      409
+    );
+  }
+}
+
+async function findGithubLinkedUser(
+  database: DatabaseClient,
+  githubUserId: string,
+  githubUsername: string
+): Promise<GithubLinkedUserRecord | null> {
+  const matches = await database
+    .select({
+      id: schema.users.id,
+      githubUsername: schema.users.githubUsername,
+      githubUserId: schema.users.githubUserId,
+      displayName: schema.users.displayName,
+      avatarUrl: schema.users.avatarUrl,
+      bio: schema.users.bio,
+      email: schema.users.email,
+      systemRole: schema.users.systemRole,
+      status: schema.users.status,
+      emailLoginEnabled: schema.users.emailLoginEnabled
+    })
+    .from(schema.users)
+    .where(
+      or(
+        eq(schema.users.id, githubUserId),
+        eq(schema.users.githubUsername, githubUsername)
+      )
+    );
+
+  const userById = matches.find((user) => user.id === githubUserId) ?? null;
+  const userByUsername =
+    matches.find((user) => user.githubUsername === githubUsername) ?? null;
+
+  if (userById && userByUsername && userById.id !== userByUsername.id) {
+    throw new PlatformMutationError(
+      'GitHub 用户 ID 与用户名命中了两条不同的本地用户记录，请先清理重复数据。',
+      409
+    );
+  }
+
+  const matchedUser = userById ?? userByUsername;
+
+  if (matchedUser) {
+    ensureCompatibleGithubIdentity(matchedUser, githubUserId);
+  }
+
+  return matchedUser;
 }
 
 type PermissionCatalog = {
@@ -957,10 +1067,13 @@ export async function createUser(
     throw new PlatformMutationError('GitHub 用户名不能为空。');
   }
 
-  const [existingUser] = await database
-    .select({ id: schema.users.id })
-    .from(schema.users)
-    .where(eq(schema.users.githubUsername, githubUsername));
+  const githubUser = await loadGithubUserIdentity(githubUsername);
+
+  const existingUser = await findGithubLinkedUser(
+    database,
+    githubUser.githubUserId,
+    githubUser.githubUsername
+  );
 
   let userId = existingUser?.id;
   const workspaceName = await getWorkspaceName(input.workspaceId);
@@ -970,9 +1083,15 @@ export async function createUser(
     const [createdUser] = await database
       .insert(schema.users)
       .values({
-        githubUsername,
+        id: githubUser.githubUserId,
+        githubUsername: githubUser.githubUsername,
+        githubUserId: githubUser.githubUserId,
         email,
-        displayName: normalizeNullable(input.displayName),
+        displayName:
+          normalizeNullable(input.displayName) ??
+          normalizeNullable(githubUser.displayName),
+        avatarUrl: normalizeNullable(githubUser.avatarUrl),
+        bio: normalizeNullable(githubUser.bio),
         systemRole: input.systemRole,
         status: input.status,
         emailLoginEnabled: input.emailLoginEnabled
@@ -984,8 +1103,14 @@ export async function createUser(
     await database
       .update(schema.users)
       .set({
+        githubUsername: githubUser.githubUsername,
+        githubUserId: githubUser.githubUserId,
         email,
-        displayName: normalizeNullable(input.displayName),
+        displayName:
+          normalizeNullable(input.displayName) ??
+          normalizeNullable(githubUser.displayName),
+        avatarUrl: normalizeNullable(githubUser.avatarUrl),
+        bio: normalizeNullable(githubUser.bio),
         systemRole: input.systemRole,
         status: input.status,
         emailLoginEnabled: input.emailLoginEnabled,
@@ -1013,10 +1138,11 @@ export async function createUser(
     entityType: 'user',
     entityId: userId,
     summary: existingUser
-      ? `将 GitHub 用户 @${githubUsername} 绑定到工作区 ${workspaceName}。`
-      : `在工作区 ${workspaceName} 中录入了 GitHub 用户 @${githubUsername}。`,
+      ? `将 GitHub 用户 @${githubUser.githubUsername} 绑定到工作区 ${workspaceName}。`
+      : `在工作区 ${workspaceName} 中录入了 GitHub 用户 @${githubUser.githubUsername}。`,
     metadata: {
-      githubUsername,
+      githubUsername: githubUser.githubUsername,
+      githubUserId: githubUser.githubUserId,
       workspaceId: input.workspaceId,
       roleIds: assignedRoleIds
     }
@@ -1051,34 +1177,13 @@ export async function importGithubUsersToWorkspace(
   const importedUsers: ImportedWorkspaceGithubUser[] = [];
 
   for (const githubUsername of githubUsernames) {
-    let githubUser;
+    const githubUser = await loadGithubUserIdentity(githubUsername);
 
-    try {
-      githubUser = await getGithubUserByUsername(githubUsername);
-    } catch (error) {
-      if (error instanceof GithubApiError) {
-        throw new PlatformMutationError(
-          error.status === 404
-            ? `GitHub 用户 @${githubUsername} 不存在。`
-            : error.message,
-          error.status === 404 ? 404 : 502
-        );
-      }
-
-      throw error;
-    }
-
-    const [existingUser] = await database
-      .select({
-        id: schema.users.id,
-        githubUserId: schema.users.githubUserId,
-        displayName: schema.users.displayName,
-        avatarUrl: schema.users.avatarUrl,
-        bio: schema.users.bio,
-        systemRole: schema.users.systemRole
-      })
-      .from(schema.users)
-      .where(eq(schema.users.githubUsername, githubUser.githubUsername));
+    const existingUser = await findGithubLinkedUser(
+      database,
+      githubUser.githubUserId,
+      githubUser.githubUsername
+    );
 
     let userId = existingUser?.id;
     let currentSystemRole = existingUser?.systemRole ?? 'member';
@@ -1087,6 +1192,7 @@ export async function importGithubUsersToWorkspace(
       const [createdUser] = await database
         .insert(schema.users)
         .values({
+          id: githubUser.githubUserId,
           githubUsername: githubUser.githubUsername,
           githubUserId: githubUser.githubUserId,
           displayName: normalizeNullable(githubUser.displayName),
@@ -1102,6 +1208,7 @@ export async function importGithubUsersToWorkspace(
       currentSystemRole = 'member';
     } else {
       const updates: {
+        githubUsername?: string;
         githubUserId?: string;
         displayName?: string | null;
         avatarUrl?: string | null;
@@ -1109,7 +1216,11 @@ export async function importGithubUsersToWorkspace(
         updatedAt?: Date;
       } = {};
 
-      if (!existingUser.githubUserId && githubUser.githubUserId) {
+      if (existingUser.githubUsername !== githubUser.githubUsername) {
+        updates.githubUsername = githubUser.githubUsername;
+      }
+
+      if (existingUser.githubUserId !== githubUser.githubUserId) {
         updates.githubUserId = githubUser.githubUserId;
       }
 
@@ -1215,9 +1326,13 @@ export async function updateUser(
   const database = requireDatabase();
   const githubUsername = input.githubUsername.trim().toLowerCase();
   const email = normalizeNullable(input.email)?.toLowerCase();
+  const githubUser = await loadGithubUserIdentity(githubUsername);
 
   const [user] = await database
-    .select({ id: schema.users.id })
+    .select({
+      id: schema.users.id,
+      githubUserId: schema.users.githubUserId
+    })
     .from(schema.users)
     .where(eq(schema.users.id, userId));
 
@@ -1225,13 +1340,16 @@ export async function updateUser(
     throw new PlatformMutationError('用户不存在。', 404);
   }
 
-  const [duplicate] = await database
-    .select({ id: schema.users.id })
-    .from(schema.users)
-    .where(eq(schema.users.githubUsername, githubUsername));
+  ensureCompatibleGithubIdentity(user, githubUser.githubUserId);
+
+  const duplicate = await findGithubLinkedUser(
+    database,
+    githubUser.githubUserId,
+    githubUser.githubUsername
+  );
 
   if (duplicate && duplicate.id !== userId) {
-    throw new PlatformMutationError('该 GitHub 用户名已经存在。', 409);
+    throw new PlatformMutationError('该 GitHub 用户已经存在。', 409);
   }
 
   await ensureUserEmailAvailable(email, userId);
@@ -1239,9 +1357,14 @@ export async function updateUser(
   await database
     .update(schema.users)
     .set({
-      githubUsername,
+      githubUsername: githubUser.githubUsername,
+      githubUserId: githubUser.githubUserId,
       email,
-      displayName: normalizeNullable(input.displayName),
+      displayName:
+        normalizeNullable(input.displayName) ??
+        normalizeNullable(githubUser.displayName),
+      avatarUrl: normalizeNullable(githubUser.avatarUrl),
+      bio: normalizeNullable(githubUser.bio),
       systemRole: input.systemRole,
       status: input.status,
       emailLoginEnabled: input.emailLoginEnabled,
@@ -1263,9 +1386,10 @@ export async function updateUser(
     action: 'user.update',
     entityType: 'user',
     entityId: userId,
-    summary: `更新了 GitHub 用户 @${githubUsername} 的资料与登录状态。`,
+    summary: `更新了 GitHub 用户 @${githubUser.githubUsername} 的资料与登录状态。`,
     metadata: {
-      githubUsername,
+      githubUsername: githubUser.githubUsername,
+      githubUserId: githubUser.githubUserId,
       workspaceId: input.workspaceId,
       roleIds: assignedRoleIds
     }

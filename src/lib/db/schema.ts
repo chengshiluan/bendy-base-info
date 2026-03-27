@@ -34,10 +34,7 @@ export const permissionScopeEnum = pgEnum('permission_scope', [
   'workspace'
 ]);
 
-export const permissionTypeEnum = pgEnum('permission_type', [
-  'menu',
-  'action'
-]);
+export const permissionTypeEnum = pgEnum('permission_type', ['menu', 'action']);
 
 export const ticketStatusEnum = pgEnum('ticket_status', [
   'open',
@@ -79,7 +76,7 @@ const timestamps = {
 export const users = pgTable(
   'users',
   {
-    id: uuid('id').defaultRandom().primaryKey(),
+    id: varchar('id', { length: 32 }).primaryKey(),
     githubUsername: varchar('github_username', { length: 39 }).notNull(),
     githubUserId: varchar('github_user_id', { length: 32 }),
     email: varchar('email', { length: 255 }),
@@ -123,7 +120,7 @@ export const workspaceMembers = pgTable(
     workspaceId: uuid('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
+    userId: varchar('user_id', { length: 32 })
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     isOwner: boolean('is_owner').default(false).notNull(),
@@ -146,9 +143,12 @@ export const teams = pgTable(
     slug: varchar('slug', { length: 80 }).notNull(),
     name: varchar('name', { length: 120 }).notNull(),
     description: text('description'),
-    leadUserId: uuid('lead_user_id').references(() => users.id, {
-      onDelete: 'set null'
-    }),
+    leadUserId: varchar('lead_user_id', { length: 32 }).references(
+      () => users.id,
+      {
+        onDelete: 'set null'
+      }
+    ),
     ...timestamps
   },
   (table) => ({
@@ -225,7 +225,7 @@ export const workspaceMemberRoles = pgTable(
     workspaceId: uuid('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
+    userId: varchar('user_id', { length: 32 })
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     roleId: uuid('role_id')
@@ -246,7 +246,7 @@ export const teamMembers = pgTable(
     teamId: uuid('team_id')
       .notNull()
       .references(() => teams.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
+    userId: varchar('user_id', { length: 32 })
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     roleId: uuid('role_id').references(() => roles.id, {
@@ -266,7 +266,9 @@ export const notifications = pgTable('notifications', {
   workspaceId: uuid('workspace_id').references(() => workspaces.id, {
     onDelete: 'cascade'
   }),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  userId: varchar('user_id', { length: 32 }).references(() => users.id, {
+    onDelete: 'cascade'
+  }),
   title: varchar('title', { length: 160 }).notNull(),
   content: text('content').notNull(),
   level: notificationLevelEnum('level').default('info').notNull(),
@@ -286,12 +288,18 @@ export const tickets = pgTable(
     description: text('description'),
     status: ticketStatusEnum('status').default('open').notNull(),
     priority: ticketPriorityEnum('priority').default('medium').notNull(),
-    reporterId: uuid('reporter_id').references(() => users.id, {
-      onDelete: 'set null'
-    }),
-    assigneeId: uuid('assignee_id').references(() => users.id, {
-      onDelete: 'set null'
-    }),
+    reporterId: varchar('reporter_id', { length: 32 }).references(
+      () => users.id,
+      {
+        onDelete: 'set null'
+      }
+    ),
+    assigneeId: varchar('assignee_id', { length: 32 }).references(
+      () => users.id,
+      {
+        onDelete: 'set null'
+      }
+    ),
     commentCount: integer('comment_count').default(0).notNull(),
     ...timestamps
   },
@@ -305,7 +313,7 @@ export const ticketComments = pgTable('ticket_comments', {
   ticketId: uuid('ticket_id')
     .notNull()
     .references(() => tickets.id, { onDelete: 'cascade' }),
-  authorId: uuid('author_id').references(() => users.id, {
+  authorId: varchar('author_id', { length: 32 }).references(() => users.id, {
     onDelete: 'set null'
   }),
   body: text('body').notNull(),
@@ -329,9 +337,12 @@ export const fileAssets = pgTable('file_assets', {
   mimeType: varchar('mime_type', { length: 120 }),
   size: integer('size').default(0).notNull(),
   publicUrl: text('public_url'),
-  uploadedBy: uuid('uploaded_by').references(() => users.id, {
-    onDelete: 'set null'
-  }),
+  uploadedBy: varchar('uploaded_by', { length: 32 }).references(
+    () => users.id,
+    {
+      onDelete: 'set null'
+    }
+  ),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull()
@@ -342,7 +353,7 @@ export const auditLogs = pgTable('audit_logs', {
   workspaceId: uuid('workspace_id').references(() => workspaces.id, {
     onDelete: 'set null'
   }),
-  actorId: uuid('actor_id').references(() => users.id, {
+  actorId: varchar('actor_id', { length: 32 }).references(() => users.id, {
     onDelete: 'set null'
   }),
   action: varchar('action', { length: 120 }).notNull(),

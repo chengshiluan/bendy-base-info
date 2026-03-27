@@ -29,7 +29,9 @@ with upsert_workspace as (
 ),
 upsert_user as (
   insert into users (
+    id,
     github_username,
+    github_user_id,
     email,
     display_name,
     system_role,
@@ -37,15 +39,19 @@ upsert_user as (
     email_login_enabled
   )
   values (
+    'your_github_user_id',
     'your_github_username',
+    'your_github_user_id',
     'admin@example.com',
     'Your Admin',
     'super_admin',
     'active',
     true
   )
-  on conflict (github_username) do update
+  on conflict (id) do update
     set
+      github_username = excluded.github_username,
+      github_user_id = excluded.github_user_id,
       email = excluded.email,
       display_name = excluded.display_name,
       system_role = excluded.system_role,

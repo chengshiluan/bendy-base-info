@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { env } from '@/lib/env';
 import {
   buildAuthUserSnapshot,
+  findUserById,
   findUserByEmail,
   findUserByGithubUsername,
   syncGithubProfile
@@ -16,6 +17,22 @@ const credentialsSchema = z.object({
   email: z.string().email(),
   code: z.string().length(6)
 });
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function normalizeGithubUserId(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `${value}`;
+  }
+
+  if (isNonEmptyString(value)) {
+    return value.trim();
+  }
+
+  return undefined;
+}
 
 function getGithubProfileValue(
   profile: unknown,
@@ -95,22 +112,24 @@ export const authOptions: NextAuthOptions = {
 
       const githubUsername =
         typeof githubLogin === 'string' ? githubLogin.toLowerCase() : undefined;
+      const githubUserId = normalizeGithubUserId(githubId);
 
-      if (!githubUsername) {
+      if (!githubUsername || !githubUserId) {
         return '/auth/sign-in?error=github_profile';
       }
 
-      const user = await findUserByGithubUsername(githubUsername);
+      const user =
+        (await findUserById(githubUserId)) ??
+        (await findUserByGithubUsername(githubUsername));
+
       if (!user || user.status !== 'active') {
         return '/auth/sign-in?error=github_not_allowed';
       }
 
       await syncGithubProfile({
         userId: user.id,
-        githubUserId:
-          typeof githubId === 'number' || typeof githubId === 'string'
-            ? `${githubId}`
-            : null,
+        githubUserId,
+        githubUsername,
         displayName:
           typeof githubName === 'string' ? githubName : githubUsername,
         avatarUrl: typeof githubAvatarUrl === 'string' ? githubAvatarUrl : null,
@@ -120,7 +139,9 @@ export const authOptions: NextAuthOptions = {
       return true;
     },
     async jwt({ token, user, account, profile }) {
-      if (user) {
+      const isGithubOAuth = account?.provider === 'github';
+
+      if (user && !isGithubOAuth && isNonEmptyString(user.id)) {
         token.id = user.id;
         token.githubUsername = user.githubUsername;
         token.systemRole = user.systemRole;
@@ -133,18 +154,34 @@ export const authOptions: NextAuthOptions = {
         token.picture = user.image;
       }
 
-      const githubLogin =
-        account?.provider === 'github'
-          ? getGithubProfileValue(profile, 'login')
-          : undefined;
-      const githubUsername =
+      const githubLogin = isGithubOAuth
+        ? getGithubProfileValue(profile, 'login')
+        : undefined;
+      const profileGithubUsername =
         typeof githubLogin === 'string' ? githubLogin.toLowerCase() : undefined;
-      const snapshotUserId =
-        typeof token.id === 'string'
-          ? token.id
-          : githubUsername
+      const profileGithubUserId = isGithubOAuth
+        ? normalizeGithubUserId(getGithubProfileValue(profile, 'id'))
+        : undefined;
+      const tokenGithubUsername =
+        typeof token.githubUsername === 'string'
+          ? token.githubUsername.toLowerCase()
+          : undefined;
+      const githubUsername = profileGithubUsername ?? tokenGithubUsername;
+      const snapshotTokenId = isNonEmptyString(token.id)
+        ? token.id.trim()
+        : undefined;
+      const githubSnapshotUserId = profileGithubUserId
+        ? (await findUserById(profileGithubUserId))?.id
+        : undefined;
+      const snapshotUserId = isGithubOAuth
+        ? (githubSnapshotUserId ??
+          (githubUsername
             ? (await findUserByGithubUsername(githubUsername))?.id
-            : undefined;
+            : undefined))
+        : (snapshotTokenId ??
+          (githubUsername
+            ? (await findUserByGithubUsername(githubUsername))?.id
+            : undefined));
 
       if (snapshotUserId) {
         const snapshot = await buildAuthUserSnapshot(snapshotUserId);

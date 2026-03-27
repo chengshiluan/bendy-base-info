@@ -1,5 +1,9 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/lib/db';
+import {
+  ensureDatabaseInitialized,
+  ensureGithubBackedUserIds
+} from '@/lib/db/bootstrap';
 import { getSystemRoleGlobalPermissionCodes } from '@/lib/platform/rbac';
 
 export interface AuthUserSnapshot {
@@ -23,12 +27,36 @@ function globalPermissions(systemRole: AuthUserSnapshot['systemRole']) {
   return getSystemRoleGlobalPermissionCodes(systemRole);
 }
 
-export async function findUserByGithubUsername(githubUsername: string) {
+async function ensureAuthDatabaseReady() {
   if (!db) {
     return null;
   }
 
-  const [user] = await db
+  await ensureDatabaseInitialized();
+  return db;
+}
+
+export async function findUserById(userId: string) {
+  const database = await ensureAuthDatabaseReady();
+  if (!database) {
+    return null;
+  }
+
+  const [user] = await database
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.id, userId));
+
+  return user ?? null;
+}
+
+export async function findUserByGithubUsername(githubUsername: string) {
+  const database = await ensureAuthDatabaseReady();
+  if (!database) {
+    return null;
+  }
+
+  const [user] = await database
     .select()
     .from(schema.users)
     .where(eq(schema.users.githubUsername, githubUsername.toLowerCase()));
@@ -37,11 +65,12 @@ export async function findUserByGithubUsername(githubUsername: string) {
 }
 
 export async function findUserByEmail(email: string) {
-  if (!db) {
+  const database = await ensureAuthDatabaseReady();
+  if (!database) {
     return null;
   }
 
-  const [user] = await db
+  const [user] = await database
     .select()
     .from(schema.users)
     .where(
@@ -57,18 +86,21 @@ export async function findUserByEmail(email: string) {
 export async function syncGithubProfile(params: {
   userId: string;
   githubUserId?: string | null;
+  githubUsername?: string | null;
   displayName?: string | null;
   avatarUrl?: string | null;
   email?: string | null;
 }) {
-  if (!db) {
+  const database = await ensureAuthDatabaseReady();
+  if (!database) {
     return;
   }
 
-  await db
+  await database
     .update(schema.users)
     .set({
       githubUserId: params.githubUserId ?? undefined,
+      githubUsername: params.githubUsername?.toLowerCase() ?? undefined,
       displayName: params.displayName ?? undefined,
       avatarUrl: params.avatarUrl ?? undefined,
       email: params.email?.toLowerCase() ?? undefined,
@@ -76,16 +108,21 @@ export async function syncGithubProfile(params: {
       updatedAt: new Date()
     })
     .where(eq(schema.users.id, params.userId));
+
+  if (params.githubUserId && params.githubUserId !== params.userId) {
+    await ensureGithubBackedUserIds();
+  }
 }
 
 export async function buildAuthUserSnapshot(
   userId: string
 ): Promise<AuthUserSnapshot | null> {
-  if (!db) {
+  const database = await ensureAuthDatabaseReady();
+  if (!database) {
     return null;
   }
 
-  const [user] = await db
+  const [user] = await database
     .select()
     .from(schema.users)
     .where(eq(schema.users.id, userId));
@@ -94,7 +131,7 @@ export async function buildAuthUserSnapshot(
     return null;
   }
 
-  const memberships = await db
+  const memberships = await database
     .select({ workspaceId: schema.workspaceMembers.workspaceId })
     .from(schema.workspaceMembers)
     .where(eq(schema.workspaceMembers.userId, user.id));
@@ -120,7 +157,7 @@ export async function buildAuthUserSnapshot(
   }
 
   const workspacePermissionRows = workspaceIds.length
-    ? await db
+    ? await database
         .select({
           workspaceId: schema.workspaceMemberRoles.workspaceId,
           code: schema.permissions.code
