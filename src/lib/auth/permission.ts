@@ -39,14 +39,14 @@ export function hasPermission(
   }
 
   const permissions = user.permissions ?? [];
+  const workspacePermissions = user.workspacePermissions ?? {};
+
   if (user.systemRole === 'super_admin' || permissions.includes('*')) {
     return true;
   }
 
   const scope = getPermissionScope(permissionCode);
   if (scope === 'workspace') {
-    const workspacePermissions = user.workspacePermissions ?? {};
-
     if (workspaceId) {
       return (workspacePermissions[workspaceId] ?? []).includes(permissionCode);
     }
@@ -56,7 +56,17 @@ export function hasPermission(
     );
   }
 
-  return permissions.includes(permissionCode);
+  if (permissions.includes(permissionCode)) {
+    return true;
+  }
+
+  if (workspaceId) {
+    return (workspacePermissions[workspaceId] ?? []).includes(permissionCode);
+  }
+
+  return Object.values(workspacePermissions).some((permissionList) =>
+    permissionList.includes(permissionCode)
+  );
 }
 
 export function hasAnyPermission(

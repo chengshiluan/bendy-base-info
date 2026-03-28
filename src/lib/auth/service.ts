@@ -4,7 +4,10 @@ import {
   ensureDatabaseInitialized,
   ensureGithubBackedUserIds
 } from '@/lib/db/bootstrap';
-import { getSystemRoleGlobalPermissionCodes } from '@/lib/platform/rbac';
+import {
+  getSystemRoleGlobalPermissionCodes,
+  menuPermissionCode
+} from '@/lib/platform/rbac';
 
 export interface AuthUserSnapshot {
   id: string;
@@ -26,6 +29,11 @@ function globalPermissions(systemRole: AuthUserSnapshot['systemRole']) {
 
   return getSystemRoleGlobalPermissionCodes(systemRole);
 }
+
+const dashboardOverviewPermissionCode = menuPermissionCode(
+  'dashboard',
+  'overview'
+);
 
 async function ensureAuthDatabaseReady() {
   if (!db) {
@@ -160,7 +168,8 @@ export async function buildAuthUserSnapshot(
     ? await database
         .select({
           workspaceId: schema.workspaceMemberRoles.workspaceId,
-          code: schema.permissions.code
+          code: schema.permissions.code,
+          scope: schema.permissions.scope
         })
         .from(schema.workspaceMemberRoles)
         .innerJoin(
@@ -174,8 +183,7 @@ export async function buildAuthUserSnapshot(
         .where(
           and(
             eq(schema.workspaceMemberRoles.userId, user.id),
-            inArray(schema.workspaceMemberRoles.workspaceId, workspaceIds),
-            eq(schema.permissions.scope, 'workspace')
+            inArray(schema.workspaceMemberRoles.workspaceId, workspaceIds)
           )
         )
     : [];
@@ -186,6 +194,13 @@ export async function buildAuthUserSnapshot(
   });
 
   workspacePermissionRows.forEach((row) => {
+    const canUseInWorkspacePermissionMap =
+      row.scope === 'workspace' || row.code === dashboardOverviewPermissionCode;
+
+    if (!canUseInWorkspacePermissionMap) {
+      return;
+    }
+
     const current = workspacePermissionMap.get(row.workspaceId);
     if (current) {
       current.add(row.code);
@@ -197,12 +212,7 @@ export async function buildAuthUserSnapshot(
       ([workspaceId, permissionSet]) => [workspaceId, Array.from(permissionSet)]
     )
   );
-  const permissions = Array.from(
-    new Set([
-      ...globalPermissions(user.systemRole),
-      ...Object.values(workspacePermissions).flat()
-    ])
-  );
+  const permissions = Array.from(new Set(globalPermissions(user.systemRole)));
 
   return {
     id: user.id,

@@ -508,7 +508,12 @@ export const allGlobalPermissionCodes = permissionSeeds
   .filter((permission) => permission.scope === 'global')
   .map((permission) => permission.code);
 
+export const roleBindableGlobalPermissionCodes = [
+  menuPermissionCode('dashboard', 'overview')
+];
+
 const memberWorkspacePermissionCodes = [
+  ...roleBindableGlobalPermissionCodes,
   menuPermissionCode('dashboard', 'workspaces', 'teams'),
   menuPermissionCode('dashboard', 'workspaces', 'users'),
   menuPermissionCode('dashboard', 'workspaces', 'roles'),
@@ -521,9 +526,9 @@ const memberWorkspacePermissionCodes = [
 ];
 
 const adminWorkspacePermissionCodes = allWorkspacePermissionCodes.slice();
+adminWorkspacePermissionCodes.unshift(...roleBindableGlobalPermissionCodes);
 
 const memberGlobalPermissionCodes = [
-  menuPermissionCode('dashboard', 'overview'),
   menuPermissionCode('dashboard', 'workspaces'),
   menuPermissionCode('dashboard', 'workspaces', 'manage'),
   menuPermissionCode('dashboard', 'profile'),

@@ -3,7 +3,8 @@ import { db, schema } from '@/lib/db';
 import {
   actionPermissionCode,
   getPermissionSeed,
-  menuPermissionCode
+  menuPermissionCode,
+  roleBindableGlobalPermissionCodes
 } from './rbac';
 import {
   buildPermissionMenuOptions,
@@ -282,14 +283,16 @@ export async function listWorkspacePermissionTree(): Promise<
 
 export async function listRolePermissionTree(): Promise<PermissionTreeNode[]> {
   const permissions = await listPermissions();
-  const workspacePermissions = permissions.filter(
-    (permission) => permission.scope === 'workspace'
+  const roleRelevantPermissions = permissions.filter(
+    (permission) =>
+      permission.scope === 'workspace' ||
+      roleBindableGlobalPermissionCodes.includes(permission.code)
   );
   const permissionByCode = new Map(
     permissions.map((permission) => [permission.code, permission] as const)
   );
   const visibleByCode = new Map(
-    workspacePermissions.map(
+    roleRelevantPermissions.map(
       (permission) => [permission.code, permission] as const
     )
   );
@@ -313,12 +316,11 @@ export async function listRolePermissionTree(): Promise<PermissionTreeNode[]> {
     );
   };
 
-  workspacePermissions.forEach((permission) => {
+  roleRelevantPermissions.forEach((permission) => {
     ensureVisibleChain(permission.parentCode);
   });
 
   [
-    menuPermissionCode('dashboard', 'overview'),
     menuPermissionCode('dashboard', 'workspaces', 'manage'),
     actionPermissionCode('create', 'dashboard', 'workspaces', 'manage'),
     actionPermissionCode('update', 'dashboard', 'workspaces', 'manage'),
@@ -328,7 +330,7 @@ export async function listRolePermissionTree(): Promise<PermissionTreeNode[]> {
   });
 
   return buildPermissionTree([
-    ...workspacePermissions,
+    ...roleRelevantPermissions,
     ...Array.from(virtualNodes.values())
   ]);
 }

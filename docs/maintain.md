@@ -36,6 +36,22 @@
 
 ## 最近开发记录
 
+### 2026-03-28 - 仪表盘权限可绑定修复与版本升级 0.1.8
+
+- 完成事项：
+  - 排查确认角色编辑弹窗里 `仪表盘` 不能勾选的直接原因有三层：`listRolePermissionTree()` 把 `dashboard.overview.menu` 当成虚拟展示节点、角色权限展开逻辑拒绝任何全局权限、会话快照又只读取工作区级角色权限，导致 UI 不可勾选且即使强行绑定也不会真正生效
+  - 调整 `src/lib/platform/service.ts`、`src/lib/platform/mutations.ts` 与 `src/lib/platform/rbac.ts`，将 `dashboard.overview.menu` 纳入工作区角色可绑定的特例全局权限，同时把默认 `admin` / `member` 角色种子补上该权限，保证现有默认角色不会在升级后丢失仪表盘入口
+  - 调整 `src/lib/auth/service.ts` 与 `src/lib/auth/permission.ts`，让当前活跃工作区角色绑定的 `dashboard.overview.menu` 能正确进入会话权限判断，并去掉 `admin` / `member` 上原本硬编码的仪表盘全局权限，保证角色勾选结果与访问结果一致
+  - 在 `src/app/dashboard/overview/layout.tsx` 为仪表盘页补上基于当前活跃工作区的页面权限守卫，未绑定该权限时即使直达 `/dashboard/overview` 也会被拦截
+  - 将项目版本号升级到 `0.1.8`，并同步更新 `CHANGELOG.md`、`docs/PLAN.md`、`docs/nav-rbac.md`、`docs/database-init.sql`、`package.json`、`package-lock.json`、`src/lib/app-info.ts`
+- 验证：
+  - 在 Node `24.11.0` 环境执行 `npx tsc --noEmit`，通过
+  - 在 Node `24.11.0` 环境执行 `npm run lint`，通过；保留 2 条既有 `react-hooks/incompatible-library` warning（`src/components/forms/demo-form.tsx`、`src/hooks/use-data-table.ts`）
+  - 在 Node `24.11.0` 环境执行 `npm run build`，通过；保留既有 `baseline-browser-mapping` 过期提示
+- 后续待办：
+  - 部署后进入角色管理弹窗，确认 `仪表盘` 节点已恢复可勾选，取消勾选后左侧菜单不再显示该入口
+  - 部署后使用一个非超级管理员账号验证：当前活跃工作区角色未绑定 `dashboard.overview.menu` 时，直达 `/dashboard/overview` 会被拦截
+
 ### 2026-03-27 - 新增用户 GitHub 自动搜索恢复与版本升级 0.1.7
 
 - 完成事项：

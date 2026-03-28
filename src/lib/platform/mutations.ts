@@ -4,6 +4,7 @@ import { db, schema } from '@/lib/db';
 import { slugify } from '@/lib/utils';
 import { recordAuditLog } from './audit';
 import { getGithubUserByUsername, GithubApiError } from './github';
+import { roleBindableGlobalPermissionCodes } from './rbac';
 import {
   listAdminNotifications,
   listAuditLogs,
@@ -600,7 +601,7 @@ async function ensureRoleIdsBelongToWorkspace(
   return normalizedRoleIds;
 }
 
-async function expandWorkspacePermissionIds(permissionIds: string[]) {
+async function expandRolePermissionIds(permissionIds: string[]) {
   const normalizedPermissionIds = uniqueValues(permissionIds);
 
   if (!normalizedPermissionIds.length) {
@@ -623,8 +624,18 @@ async function expandWorkspacePermissionIds(permissionIds: string[]) {
   normalizedPermissionIds.forEach((permissionId) => {
     const row = permissionById.get(permissionId);
 
-    if (!row || row.scope !== 'workspace') {
-      throw new PlatformMutationError('角色只能绑定工作区级权限。', 400);
+    if (!row) {
+      throw new PlatformMutationError('选择的权限里包含无效项。', 400);
+    }
+
+    if (
+      row.scope !== 'workspace' &&
+      !roleBindableGlobalPermissionCodes.includes(row.code)
+    ) {
+      throw new PlatformMutationError(
+        '角色当前只能绑定工作区级权限和仪表盘菜单权限。',
+        400
+      );
     }
   });
 
@@ -1436,7 +1447,7 @@ export async function createRole(
 ) {
   const database = requireDatabase();
   const key = slugify(input.key).replace(/-/g, '_');
-  const permissionIds = await expandWorkspacePermissionIds(input.permissionIds);
+  const permissionIds = await expandRolePermissionIds(input.permissionIds);
 
   await getWorkspaceRecord(input.workspaceId);
   await ensureRoleKeyAvailable(input.workspaceId, key);
@@ -1484,7 +1495,7 @@ export async function updateRole(
   const database = requireDatabase();
   const role = await getRoleSummaryById(roleId, input.workspaceId);
   const key = slugify(input.key).replace(/-/g, '_');
-  const permissionIds = await expandWorkspacePermissionIds(input.permissionIds);
+  const permissionIds = await expandRolePermissionIds(input.permissionIds);
 
   await getWorkspaceRecord(input.workspaceId);
   await ensureRoleKeyAvailable(input.workspaceId, key, roleId);

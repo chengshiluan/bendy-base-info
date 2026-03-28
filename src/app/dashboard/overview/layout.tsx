@@ -10,6 +10,10 @@ import {
 } from '@/components/ui/card';
 import { DashboardCalendarTimeline } from '@/features/overview/components/dashboard-calendar-timeline';
 import { APP_VERSION_LABEL } from '@/lib/app-info';
+import { hasPermission } from '@/lib/auth/permission';
+import { requireSession } from '@/lib/auth/session';
+import { getActiveWorkspaceCookie } from '@/lib/auth/workspace';
+import { menuPermissionCode } from '@/lib/platform/rbac';
 import { getDashboardMetrics } from '@/lib/platform/service';
 import {
   IconBellRinging,
@@ -17,6 +21,7 @@ import {
   IconLayoutKanban,
   IconUsers
 } from '@tabler/icons-react';
+import { notFound } from 'next/navigation';
 import React from 'react';
 
 export default async function OverViewLayout({
@@ -30,6 +35,23 @@ export default async function OverViewLayout({
   bar_stats: React.ReactNode;
   area_stats: React.ReactNode;
 }) {
+  const session = await requireSession();
+  const cookieWorkspaceId = await getActiveWorkspaceCookie();
+  const activeWorkspaceId =
+    cookieWorkspaceId && session.user.workspaceIds.includes(cookieWorkspaceId)
+      ? cookieWorkspaceId
+      : session.user.defaultWorkspaceId || undefined;
+
+  if (
+    !hasPermission(
+      session.user,
+      menuPermissionCode('dashboard', 'overview'),
+      activeWorkspaceId
+    )
+  ) {
+    notFound();
+  }
+
   const metrics = await getDashboardMetrics();
 
   return (
