@@ -509,11 +509,26 @@ export const allGlobalPermissionCodes = permissionSeeds
   .map((permission) => permission.code);
 
 export const roleBindableGlobalPermissionCodes = [
-  menuPermissionCode('dashboard', 'overview')
+  menuPermissionCode('dashboard', 'overview'),
+  menuPermissionCode('dashboard', 'workspaces', 'manage'),
+  actionPermissionCode('create', 'dashboard', 'workspaces', 'manage'),
+  actionPermissionCode('update', 'dashboard', 'workspaces', 'manage'),
+  actionPermissionCode('archive', 'dashboard', 'workspaces', 'manage')
 ];
 
+const superAdminRoleBindableGlobalPermissionCodes =
+  roleBindableGlobalPermissionCodes.slice();
+
+const adminRoleBindableGlobalPermissionCodes = [
+  menuPermissionCode('dashboard', 'overview'),
+  menuPermissionCode('dashboard', 'workspaces', 'manage')
+];
+
+const memberRoleBindableGlobalPermissionCodes =
+  adminRoleBindableGlobalPermissionCodes.slice();
+
 const memberWorkspacePermissionCodes = [
-  ...roleBindableGlobalPermissionCodes,
+  ...memberRoleBindableGlobalPermissionCodes,
   menuPermissionCode('dashboard', 'workspaces', 'teams'),
   menuPermissionCode('dashboard', 'workspaces', 'users'),
   menuPermissionCode('dashboard', 'workspaces', 'roles'),
@@ -526,11 +541,17 @@ const memberWorkspacePermissionCodes = [
 ];
 
 const adminWorkspacePermissionCodes = allWorkspacePermissionCodes.slice();
-adminWorkspacePermissionCodes.unshift(...roleBindableGlobalPermissionCodes);
+adminWorkspacePermissionCodes.unshift(
+  ...adminRoleBindableGlobalPermissionCodes
+);
+
+const superAdminWorkspacePermissionCodes = allWorkspacePermissionCodes.slice();
+superAdminWorkspacePermissionCodes.unshift(
+  ...superAdminRoleBindableGlobalPermissionCodes
+);
 
 const memberGlobalPermissionCodes = [
   menuPermissionCode('dashboard', 'workspaces'),
-  menuPermissionCode('dashboard', 'workspaces', 'manage'),
   menuPermissionCode('dashboard', 'profile'),
   actionPermissionCode('update', 'dashboard', 'profile')
 ];
@@ -548,7 +569,7 @@ export const systemRoleSeeds: SystemRoleSeed[] = [
     key: 'super_admin',
     name: '超级管理员',
     description: '系统内置角色，拥有当前工作区下全部页面与操作能力。',
-    permissionCodes: allWorkspacePermissionCodes
+    permissionCodes: superAdminWorkspacePermissionCodes
   },
   {
     key: 'admin',

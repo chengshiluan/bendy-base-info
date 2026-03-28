@@ -1,17 +1,33 @@
 import PageContainer from '@/components/layout/page-container';
 import { WorkspacesManagementClient } from '@/features/management/components/workspaces-management-client';
 import { hasPermission } from '@/lib/auth/permission';
-import { requirePagePermission } from '@/lib/auth/session';
+import { requireSession } from '@/lib/auth/session';
+import { getActiveWorkspaceCookie } from '@/lib/auth/workspace';
 import { actionPermissionCode, menuPermissionCode } from '@/lib/platform/rbac';
 import {
   getWorkspaceSummaryMetrics,
   listWorkspacesPage
 } from '@/lib/platform/service';
+import { notFound } from 'next/navigation';
 
 export default async function WorkspacesPage() {
-  const session = await requirePagePermission(
-    menuPermissionCode('dashboard', 'workspaces', 'manage')
-  );
+  const cookieWorkspaceId = await getActiveWorkspaceCookie();
+  const session = await requireSession();
+  const activeWorkspaceId =
+    cookieWorkspaceId && session.user.workspaceIds.includes(cookieWorkspaceId)
+      ? cookieWorkspaceId
+      : session.user.defaultWorkspaceId || undefined;
+
+  if (
+    !hasPermission(
+      session.user,
+      menuPermissionCode('dashboard', 'workspaces', 'manage'),
+      activeWorkspaceId
+    )
+  ) {
+    notFound();
+  }
+
   const [{ items, pagination }, summary] = await Promise.all([
     listWorkspacesPage({
       userId: session.user.id,
@@ -32,15 +48,23 @@ export default async function WorkspacesPage() {
         access={{
           canCreate: hasPermission(
             session.user,
-            actionPermissionCode('create', 'dashboard', 'workspaces', 'manage')
+            actionPermissionCode('create', 'dashboard', 'workspaces', 'manage'),
+            activeWorkspaceId
           ),
           canUpdate: hasPermission(
             session.user,
-            actionPermissionCode('update', 'dashboard', 'workspaces', 'manage')
+            actionPermissionCode('update', 'dashboard', 'workspaces', 'manage'),
+            activeWorkspaceId
           ),
           canArchive: hasPermission(
             session.user,
-            actionPermissionCode('archive', 'dashboard', 'workspaces', 'manage')
+            actionPermissionCode(
+              'archive',
+              'dashboard',
+              'workspaces',
+              'manage'
+            ),
+            activeWorkspaceId
           )
         }}
       />

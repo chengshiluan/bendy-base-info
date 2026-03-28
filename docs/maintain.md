@@ -36,6 +36,22 @@
 
 ## 最近开发记录
 
+### 2026-03-28 - 管理工作区权限可绑定修复与版本升级 0.1.9
+
+- 完成事项：
+  - 排查确认角色编辑弹窗里 `管理工作区菜单` 及其 `新增 / 编辑 / 归档工作区` 动作不能勾选的直接原因与仪表盘问题同源：它们仍被当作仅用于展示层级的全局虚拟节点，角色树里只显示、不允许绑定，角色写入和会话权限聚合也不会把这组全局隐藏权限真正落到工作区角色上
+  - 调整 `src/lib/platform/rbac.ts`、`src/lib/platform/service.ts` 与 `src/lib/platform/mutations.ts`，将 `dashboard.workspaces.manage.*` 纳入工作区角色可绑定的特例全局权限，并区分“可绑定”和“默认系统角色默认携带”的权限集合，让 `管理工作区菜单` 可勾选，同时保留 `新增 / 编辑 / 归档工作区` 的细粒度按钮控制
+  - 调整 `src/lib/auth/service.ts`、`src/lib/auth/permission.ts`、`src/components/org-switcher.tsx` 与 `src/app/dashboard/workspaces/page.tsx`，让组织切换器里的“管理工作区”入口、工作区管理页以及页面内按钮都按当前活跃工作区的角色权限来判断，不再出现“弹窗可见但入口/页面行为不一致”或“任意工作区有权限就全局放行”的情况
+  - 去掉 `admin` / `member` 上原本硬编码的 `管理工作区菜单` 全局权限，改为通过默认角色种子分配；同时把 `super_admin` 默认角色补齐这组可绑定全局权限，保证系统内置角色在弹窗里的勾选状态与实际能力更一致
+  - 将项目版本号升级到 `0.1.9`，并同步更新 `CHANGELOG.md`、`docs/PLAN.md`、`docs/nav-rbac.md`、`docs/database-init.sql`、`package.json`、`package-lock.json`、`src/lib/app-info.ts`
+- 验证：
+  - 在 Node `24.11.0` 环境执行 `npx tsc --noEmit`，通过
+  - 在 Node `24.11.0` 环境执行 `npm run lint`，通过；保留 2 条既有 `react-hooks/incompatible-library` warning（`src/components/forms/demo-form.tsx`、`src/hooks/use-data-table.ts`）
+  - 在 Node `24.11.0` 环境执行 `npm run build`，通过；保留既有 `baseline-browser-mapping` 过期提示
+- 后续待办：
+  - 部署后进入角色管理弹窗，确认 `管理工作区菜单` 与其 `新增 / 编辑 / 归档工作区` 子权限都可正常勾选
+  - 部署后验证非超级管理员账号在不同活跃工作区切换下，“管理工作区”隐藏入口与 `/dashboard/workspaces` 页面会按当前工作区角色权限变化
+
 ### 2026-03-28 - 仪表盘权限可绑定修复与版本升级 0.1.8
 
 - 完成事项：

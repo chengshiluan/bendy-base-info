@@ -105,9 +105,10 @@ export function OrgSwitcher() {
     () =>
       hasPermission(
         data?.user,
-        menuPermissionCode('dashboard', 'workspaces', 'manage')
+        menuPermissionCode('dashboard', 'workspaces', 'manage'),
+        activeWorkspaceId
       ),
-    [data?.user]
+    [activeWorkspaceId, data?.user]
   );
 
   const handleWorkspaceChange = async (workspaceId: string) => {

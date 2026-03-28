@@ -6,7 +6,7 @@ import {
 } from '@/lib/db/bootstrap';
 import {
   getSystemRoleGlobalPermissionCodes,
-  menuPermissionCode
+  roleBindableGlobalPermissionCodes
 } from '@/lib/platform/rbac';
 
 export interface AuthUserSnapshot {
@@ -30,9 +30,8 @@ function globalPermissions(systemRole: AuthUserSnapshot['systemRole']) {
   return getSystemRoleGlobalPermissionCodes(systemRole);
 }
 
-const dashboardOverviewPermissionCode = menuPermissionCode(
-  'dashboard',
-  'overview'
+const roleBindableGlobalPermissionCodeSet = new Set(
+  roleBindableGlobalPermissionCodes
 );
 
 async function ensureAuthDatabaseReady() {
@@ -195,7 +194,8 @@ export async function buildAuthUserSnapshot(
 
   workspacePermissionRows.forEach((row) => {
     const canUseInWorkspacePermissionMap =
-      row.scope === 'workspace' || row.code === dashboardOverviewPermissionCode;
+      row.scope === 'workspace' ||
+      roleBindableGlobalPermissionCodeSet.has(row.code);
 
     if (!canUseInWorkspacePermissionMap) {
       return;
