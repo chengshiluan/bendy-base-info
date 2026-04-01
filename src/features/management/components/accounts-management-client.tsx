@@ -1,14 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import {
-  Copy,
-  ExternalLink,
-  Loader2,
-  PencilLine,
-  Plus,
-  Trash2
-} from 'lucide-react';
+import { Copy, ExternalLink, Loader2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,6 +13,14 @@ import {
   CardTitle
 } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -43,7 +44,6 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import type {
   ManagedAccountBindingSummary,
@@ -127,8 +127,7 @@ type SecurityFormState = {
 type ActiveSheet =
   | { type: 'closed' }
   | { type: 'account-editor'; accountId?: number }
-  | { type: 'platform-editor'; platformId?: number }
-  | { type: 'platform-bind'; accountId: number }
+  | { type: 'platforms'; accountId?: number }
   | { type: 'keys'; accountId: number }
   | { type: 'bindings'; accountId: number }
   | { type: 'sources'; accountId?: number }
@@ -137,7 +136,7 @@ type ActiveSheet =
 
 type DeleteTarget = null | {
   type: 'account' | 'platform' | 'source' | 'key' | 'binding' | 'security';
-  id: number;
+  ids: number[];
   label: string;
 };
 
@@ -330,22 +329,35 @@ export function AccountsManagementClient({
     null
   );
   const [selectedSourceIds, setSelectedSourceIds] = useState<number[]>([]);
+  const [selectedPlatformIds, setSelectedPlatformIds] = useState<number[]>([]);
+  const [selectedCatalogSourceIds, setSelectedCatalogSourceIds] = useState<
+    number[]
+  >([]);
   const [wealthDrafts, setWealthDrafts] = useState<ManagedWealthEntry[]>(
     createEmptyWealthEntries()
   );
-  const [platformSearch, setPlatformSearch] = useState('');
+  const [platformSearchDraft, setPlatformSearchDraft] = useState('');
+  const [platformSearchKeyword, setPlatformSearchKeyword] = useState('');
+  const [sourceSearchDraft, setSourceSearchDraft] = useState('');
+  const [sourceSearchKeyword, setSourceSearchKeyword] = useState('');
+  const [platformDialogOpen, setPlatformDialogOpen] = useState(false);
+  const [platformEditingId, setPlatformEditingId] = useState<number | null>(
+    null
+  );
+  const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
   const [deletePending, setDeletePending] = useState(false);
+  const [wideSheetWidth, setWideSheetWidth] = useState(1080);
+  const [resizingWideSheet, setResizingWideSheet] = useState(false);
   const canManageNested = access.canCreate || access.canUpdate;
-  const editingPlatform =
-    activeSheet.type === 'platform-editor' && activeSheet.platformId
-      ? (platforms.find((platform) => platform.id === activeSheet.platformId) ??
-        null)
-      : null;
   const sheetOpen = activeSheet.type !== 'closed';
+  const wideSheetActive =
+    activeSheet.type === 'platforms' || activeSheet.type === 'sources';
+  const toolbarButtonClassName =
+    'h-10 rounded-xl px-4 focus-visible:bg-white focus-visible:text-black active:bg-white active:text-black';
 
   const filteredPlatforms = useMemo(() => {
-    const keyword = platformSearch.trim().toLowerCase();
+    const keyword = platformSearchKeyword.trim().toLowerCase();
 
     if (!keyword) {
       return platforms;
@@ -356,7 +368,24 @@ export function AccountsManagementClient({
         value.toLowerCase().includes(keyword)
       )
     );
-  }, [platformSearch, platforms]);
+  }, [platformSearchKeyword, platforms]);
+
+  const filteredRegistrationSources = useMemo(() => {
+    const keyword = sourceSearchKeyword.trim().toLowerCase();
+
+    if (!keyword) {
+      return registrationSources;
+    }
+
+    return registrationSources.filter((source) =>
+      [
+        source.name,
+        source.code,
+        source.website ?? '',
+        source.remark ?? ''
+      ].some((value) => value.toLowerCase().includes(keyword))
+    );
+  }, [registrationSources, sourceSearchKeyword]);
 
   async function refreshAccounts() {
     if (!workspaceId) {
@@ -425,6 +454,7 @@ export function AccountsManagementClient({
     setPlatformForm(createDefaultPlatformForm());
     setRegistrationSourceForm(createDefaultRegistrationSourceForm());
     setEditingSourceId(null);
+    setSourceDialogOpen(false);
     setKeyForm(createDefaultKeyForm());
     setEditingKeyId(null);
     setBindingForm(createDefaultBindingForm());
@@ -433,8 +463,15 @@ export function AccountsManagementClient({
     setSecurityForm(createDefaultSecurityForm());
     setEditingSecurityId(null);
     setSelectedSourceIds([]);
+    setSelectedPlatformIds([]);
+    setSelectedCatalogSourceIds([]);
     setWealthDrafts(createEmptyWealthEntries());
-    setPlatformSearch('');
+    setPlatformSearchDraft('');
+    setPlatformSearchKeyword('');
+    setSourceSearchDraft('');
+    setSourceSearchKeyword('');
+    setPlatformDialogOpen(false);
+    setPlatformEditingId(null);
   }
 
   function closeSheet() {
@@ -502,6 +539,35 @@ export function AccountsManagementClient({
     workspaceId
   ]);
 
+  useEffect(() => {
+    if (!resizingWideSheet) {
+      return;
+    }
+
+    function handleMouseMove(event: MouseEvent) {
+      const nextWidth = window.innerWidth - event.clientX;
+      setWideSheetWidth(
+        Math.min(window.innerWidth - 24, Math.max(680, nextWidth))
+      );
+    }
+
+    function handleMouseUp() {
+      setResizingWideSheet(false);
+    }
+
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizingWideSheet]);
+
   function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSearchKeyword(searchDraft.trim());
@@ -550,8 +616,7 @@ export function AccountsManagementClient({
     }
   }
 
-  function openPlatformEditor(platform?: ManagedPlatformSummary) {
-    resetForms();
+  function openPlatformDialog(platform?: ManagedPlatformSummary) {
     setPlatformForm(
       platform
         ? {
@@ -562,15 +627,30 @@ export function AccountsManagementClient({
           }
         : createDefaultPlatformForm()
     );
-    setActiveSheet({
-      type: 'platform-editor',
-      platformId: platform?.id
-    });
+    setPlatformEditingId(platform?.id ?? null);
+    setPlatformDialogOpen(true);
+  }
+
+  function openSourceDialog(source?: ManagedRegistrationSourceSummary) {
+    if (source) {
+      setEditingSourceId(source.id);
+      setRegistrationSourceForm({
+        name: source.name,
+        code: source.code,
+        website: source.website ?? '',
+        remark: source.remark ?? ''
+      });
+    } else {
+      setEditingSourceId(null);
+      setRegistrationSourceForm(createDefaultRegistrationSourceForm());
+    }
+
+    setSourceDialogOpen(true);
   }
 
   async function openAccountSheet(
     sheetType:
-      | 'platform-bind'
+      | 'platforms'
       | 'keys'
       | 'bindings'
       | 'sources'
@@ -580,15 +660,17 @@ export function AccountsManagementClient({
   ) {
     resetForms();
 
-    if (!account && sheetType !== 'sources') {
+    if (!account && !['platforms', 'sources'].includes(sheetType)) {
       return;
     }
 
-    setActiveSheet(
-      sheetType === 'sources'
-        ? { type: 'sources', accountId: account?.id }
-        : { type: sheetType, accountId: account!.id }
-    );
+    if (sheetType === 'platforms') {
+      setActiveSheet({ type: 'platforms', accountId: account?.id });
+    } else if (sheetType === 'sources') {
+      setActiveSheet({ type: 'sources', accountId: account?.id });
+    } else {
+      setActiveSheet({ type: sheetType, accountId: account!.id });
+    }
 
     if (!account) {
       return;
@@ -710,9 +792,9 @@ export function AccountsManagementClient({
         region: platformForm.region
       };
 
-      if (activeSheet.type === 'platform-editor' && activeSheet.platformId) {
+      if (platformEditingId) {
         await requestJson(
-          `/api/admin/accounts/platforms/${activeSheet.platformId}`,
+          `/api/admin/accounts/platforms/${platformEditingId}`,
           {
             method: 'PUT',
             body: JSON.stringify(payload)
@@ -728,7 +810,9 @@ export function AccountsManagementClient({
       }
 
       await Promise.all([refreshMeta(), refreshAccounts()]);
-      closeSheet();
+      setPlatformDialogOpen(false);
+      setPlatformEditingId(null);
+      setPlatformForm(createDefaultPlatformForm());
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
@@ -739,7 +823,7 @@ export function AccountsManagementClient({
   async function handleBindPrimaryPlatform(platformId: number) {
     if (
       !workspaceId ||
-      activeSheet.type !== 'platform-bind' ||
+      activeSheet.type !== 'platforms' ||
       !activeSheet.accountId
     ) {
       return;
@@ -762,7 +846,6 @@ export function AccountsManagementClient({
       setSelectedAccountDetail(data.account);
       toast.success('主平台已绑定。');
       await refreshAccounts();
-      closeSheet();
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
@@ -912,7 +995,10 @@ export function AccountsManagementClient({
     }
   }
 
-  async function handleSourceBindingSave() {
+  async function handleSourceBindingToggle(
+    sourceId: number,
+    shouldBind: boolean
+  ) {
     if (
       !workspaceId ||
       activeSheet.type !== 'sources' ||
@@ -924,17 +1010,22 @@ export function AccountsManagementClient({
     setSubmitPending(true);
 
     try {
+      const nextSourceIds = shouldBind
+        ? Array.from(new Set([...selectedSourceIds, sourceId]))
+        : selectedSourceIds.filter((id) => id !== sourceId);
+
       const data = await requestJson<{ account: ManagedAccountDetail }>(
         `/api/admin/accounts/${activeSheet.accountId}/registration-sources?workspaceId=${workspaceId}`,
         {
           method: 'PUT',
           body: JSON.stringify({
-            sourceIds: selectedSourceIds
+            sourceIds: nextSourceIds
           })
         }
       );
 
       setSelectedAccountDetail(data.account);
+      setSelectedSourceIds(data.account.registrationSourceIds);
       toast.success('注册源绑定已更新。');
       await refreshAccounts();
     } catch (error) {
@@ -988,6 +1079,7 @@ export function AccountsManagementClient({
       }
       setRegistrationSourceForm(createDefaultRegistrationSourceForm());
       setEditingSourceId(null);
+      setSourceDialogOpen(false);
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
@@ -1065,14 +1157,14 @@ export function AccountsManagementClient({
     });
   }
 
-  function beginEditSource(source: ManagedRegistrationSourceSummary) {
-    setEditingSourceId(source.id);
-    setRegistrationSourceForm({
-      name: source.name,
-      code: source.code,
-      website: source.website ?? '',
-      remark: source.remark ?? ''
-    });
+  function toggleSelectedIds(
+    current: number[],
+    id: number,
+    checked: boolean | 'indeterminate'
+  ) {
+    return checked
+      ? Array.from(new Set([...current, id]))
+      : current.filter((currentId) => currentId !== id);
   }
 
   async function handleDeleteConfirm() {
@@ -1085,35 +1177,65 @@ export function AccountsManagementClient({
     try {
       switch (deleteTarget.type) {
         case 'account':
-          await requestJson(
-            `/api/admin/accounts/${deleteTarget.id}?workspaceId=${workspaceId}`,
-            { method: 'DELETE' }
+          await Promise.all(
+            deleteTarget.ids.map((id) =>
+              requestJson(
+                `/api/admin/accounts/${id}?workspaceId=${workspaceId}`,
+                {
+                  method: 'DELETE'
+                }
+              )
+            )
           );
-          toast.success('账号已删除。');
+          toast.success(
+            deleteTarget.ids.length > 1 ? '账号已批量删除。' : '账号已删除。'
+          );
           closeSheet();
           break;
         case 'platform':
-          await requestJson(
-            `/api/admin/accounts/platforms/${deleteTarget.id}?workspaceId=${workspaceId}`,
-            { method: 'DELETE' }
+          await Promise.all(
+            deleteTarget.ids.map((id) =>
+              requestJson(
+                `/api/admin/accounts/platforms/${id}?workspaceId=${workspaceId}`,
+                { method: 'DELETE' }
+              )
+            )
           );
-          toast.success('平台已删除。');
-          if (activeSheet.type === 'platform-editor') {
-            closeSheet();
+          toast.success(
+            deleteTarget.ids.length > 1 ? '平台已批量删除。' : '平台已删除。'
+          );
+          if (
+            platformEditingId &&
+            deleteTarget.ids.includes(platformEditingId)
+          ) {
+            setPlatformDialogOpen(false);
+            setPlatformEditingId(null);
+            setPlatformForm(createDefaultPlatformForm());
           }
+          setSelectedPlatformIds([]);
           break;
         case 'source':
-          await requestJson(
-            `/api/admin/accounts/registration-sources/${deleteTarget.id}?workspaceId=${workspaceId}`,
-            { method: 'DELETE' }
+          await Promise.all(
+            deleteTarget.ids.map((id) =>
+              requestJson(
+                `/api/admin/accounts/registration-sources/${id}?workspaceId=${workspaceId}`,
+                { method: 'DELETE' }
+              )
+            )
           );
-          toast.success('注册源已删除。');
+          toast.success(
+            deleteTarget.ids.length > 1
+              ? '注册源已批量删除。'
+              : '注册源已删除。'
+          );
           setRegistrationSourceForm(createDefaultRegistrationSourceForm());
           setEditingSourceId(null);
+          setSourceDialogOpen(false);
+          setSelectedCatalogSourceIds([]);
           break;
         case 'key': {
           const data = await requestJson<{ account: ManagedAccountDetail }>(
-            `/api/admin/accounts/keys/${deleteTarget.id}?workspaceId=${workspaceId}`,
+            `/api/admin/accounts/keys/${deleteTarget.ids[0]}?workspaceId=${workspaceId}`,
             { method: 'DELETE' }
           );
           setSelectedAccountDetail(data.account);
@@ -1122,7 +1244,7 @@ export function AccountsManagementClient({
         }
         case 'binding': {
           const data = await requestJson<{ account: ManagedAccountDetail }>(
-            `/api/admin/accounts/bindings/${deleteTarget.id}?workspaceId=${workspaceId}`,
+            `/api/admin/accounts/bindings/${deleteTarget.ids[0]}?workspaceId=${workspaceId}`,
             { method: 'DELETE' }
           );
           setSelectedAccountDetail(data.account);
@@ -1131,7 +1253,7 @@ export function AccountsManagementClient({
         }
         case 'security': {
           const data = await requestJson<{ account: ManagedAccountDetail }>(
-            `/api/admin/accounts/securities/${deleteTarget.id}?workspaceId=${workspaceId}`,
+            `/api/admin/accounts/securities/${deleteTarget.ids[0]}?workspaceId=${workspaceId}`,
             { method: 'DELETE' }
           );
           setSelectedAccountDetail(data.account);
@@ -1337,203 +1459,216 @@ export function AccountsManagementClient({
           </>
         );
 
-      case 'platform-editor':
+      case 'platforms': {
+        const allPlatformsSelected =
+          filteredPlatforms.length > 0 &&
+          filteredPlatforms.every((platform) =>
+            selectedPlatformIds.includes(platform.id)
+          );
+
         return (
           <>
-            <SheetHeader>
-              <SheetTitle>
-                {activeSheet.platformId ? '平台详情' : '新增平台'}
-              </SheetTitle>
-              <SheetDescription>
-                平台地址会作为主链接展示，平台 Icon 默认根据地址自动补全为
-                `/favicon.ico`。
-              </SheetDescription>
+            <SheetHeader className='border-border/60 border-b pb-4'>
+              <SheetTitle>平台</SheetTitle>
             </SheetHeader>
-            <form className='mt-6 space-y-4' onSubmit={handlePlatformSubmit}>
-              <div className='grid gap-2'>
-                <div className='text-sm font-medium'>平台名称</div>
+            <div className='flex h-full min-h-0 flex-col px-4 pb-4'>
+              <form
+                className='border-border/60 flex flex-col gap-2 border-b py-4 lg:flex-row lg:items-center'
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setPlatformSearchKeyword(platformSearchDraft.trim());
+                }}
+              >
                 <Input
-                  value={platformForm.name}
-                  onChange={(event) =>
-                    setPlatformForm((current) => ({
-                      ...current,
-                      name: event.target.value
-                    }))
-                  }
-                  placeholder='请输入平台名称'
+                  value={platformSearchDraft}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setPlatformSearchDraft(value);
+                    if (!value.trim()) {
+                      setPlatformSearchKeyword('');
+                    }
+                  }}
+                  placeholder='搜索平台名称 / 平台地址'
+                  className='h-10 flex-1 rounded-xl px-4'
                 />
-              </div>
-
-              <div className='grid gap-2'>
-                <div className='text-sm font-medium'>平台地址</div>
-                <Input
-                  value={platformForm.url}
-                  onChange={(event) =>
-                    setPlatformForm((current) => ({
-                      ...current,
-                      url: event.target.value
-                    }))
-                  }
-                  placeholder='https://example.com'
-                />
-              </div>
-
-              <div className='grid gap-2'>
-                <div className='text-sm font-medium'>平台 Icon 地址</div>
-                <Input
-                  value={platformForm.iconUrl}
-                  onChange={(event) =>
-                    setPlatformForm((current) => ({
-                      ...current,
-                      iconUrl: event.target.value
-                    }))
-                  }
-                  placeholder='留空则自动使用 /favicon.ico'
-                />
-              </div>
-
-              <div className='grid gap-2'>
-                <div className='text-sm font-medium'>网域性质</div>
-                <Select
-                  value={platformForm.region}
-                  onValueChange={(value: ManagedPlatformSummary['region']) =>
-                    setPlatformForm((current) => ({
-                      ...current,
-                      region: value
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value='mainland'>内地</SelectItem>
-                    <SelectItem value='hk_mo_tw'>港澳台</SelectItem>
-                    <SelectItem value='overseas'>海外</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {editingPlatform ? (
-                <div className='rounded-lg border p-3 text-sm'>
-                  <div className='mb-2 flex items-center gap-3'>
-                    <PlatformIcon
-                      iconUrl={editingPlatform.iconUrl}
-                      name={editingPlatform.name}
-                    />
-                    <div>
-                      <div className='font-medium'>{editingPlatform.name}</div>
-                      <div className='text-muted-foreground'>
-                        {getPlatformRegionLabel(editingPlatform.region)}
-                      </div>
-                    </div>
-                  </div>
-                  <a
-                    href={editingPlatform.url}
-                    target='_blank'
-                    rel='noreferrer'
-                    className='text-primary inline-flex items-center gap-1 underline-offset-4 hover:underline'
+                <div className='flex flex-wrap items-center justify-end gap-2'>
+                  <Button
+                    type='submit'
+                    variant='outline'
+                    className={toolbarButtonClassName}
+                    onMouseUp={(event) => event.currentTarget.blur()}
                   >
-                    打开平台地址
-                    <ExternalLink className='size-4' />
-                  </a>
-                </div>
-              ) : null}
-
-              <div className='flex items-center justify-between gap-2 pt-2'>
-                <div>
-                  {activeSheet.platformId && access.canDelete ? (
+                    搜索
+                  </Button>
+                  {access.canCreate ? (
                     <Button
                       type='button'
                       variant='outline'
+                      className={toolbarButtonClassName}
+                      onClick={() => openPlatformDialog()}
+                      onMouseUp={(event) => event.currentTarget.blur()}
+                    >
+                      新增
+                    </Button>
+                  ) : null}
+                  {access.canDelete ? (
+                    <Button
+                      type='button'
+                      variant='outline'
+                      className={toolbarButtonClassName}
+                      disabled={!selectedPlatformIds.length}
                       onClick={() =>
                         setDeleteTarget({
                           type: 'platform',
-                          id: activeSheet.platformId!,
-                          label: editingPlatform?.name || '当前平台'
+                          ids: selectedPlatformIds,
+                          label:
+                            selectedPlatformIds.length > 1
+                              ? `已选 ${selectedPlatformIds.length} 个平台`
+                              : platforms.find(
+                                  (platform) =>
+                                    platform.id === selectedPlatformIds[0]
+                                )?.name || '当前平台'
                         })
                       }
+                      onMouseUp={(event) => event.currentTarget.blur()}
                     >
-                      删除平台
+                      删除
                     </Button>
                   ) : null}
                 </div>
-                <div className='flex items-center gap-2'>
-                  <Button type='button' variant='outline' onClick={closeSheet}>
-                    取消
-                  </Button>
-                  <Button type='submit' disabled={submitPending}>
-                    {submitPending
-                      ? '保存中...'
-                      : activeSheet.platformId
-                        ? '保存修改'
-                        : '创建平台'}
-                  </Button>
-                </div>
-              </div>
-            </form>
-          </>
-        );
+              </form>
 
-      case 'platform-bind':
-        return (
-          <>
-            <SheetHeader>
-              <SheetTitle>绑定主平台</SheetTitle>
-              <SheetDescription>
-                默认展示当前工作区下的全部平台，仅允许单绑定。
-              </SheetDescription>
-            </SheetHeader>
-            <div className='mt-6 space-y-4'>
-              <Input
-                value={platformSearch}
-                onChange={(event) => setPlatformSearch(event.target.value)}
-                placeholder='搜索平台名称或平台地址'
-              />
+              <div className='min-h-0 flex-1 overflow-auto py-4'>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className='w-12'>
+                        <Checkbox
+                          checked={
+                            allPlatformsSelected
+                              ? true
+                              : selectedPlatformIds.length
+                                ? 'indeterminate'
+                                : false
+                          }
+                          onCheckedChange={(checked) =>
+                            setSelectedPlatformIds(
+                              checked
+                                ? filteredPlatforms.map(
+                                    (platform) => platform.id
+                                  )
+                                : []
+                            )
+                          }
+                          aria-label='全选平台'
+                        />
+                      </TableHead>
+                      <TableHead>平台</TableHead>
+                      <TableHead>平台地址</TableHead>
+                      <TableHead>网域性质</TableHead>
+                      <TableHead className='w-[220px]'>操作</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPlatforms.map((platform) => {
+                      const isCurrent =
+                        selectedAccountDetail?.platformId === platform.id;
 
-              <div className='space-y-3'>
-                {filteredPlatforms.map((platform) => (
-                  <div
-                    key={platform.id}
-                    className='flex items-center justify-between rounded-lg border p-3'
-                  >
-                    <div className='flex min-w-0 items-center gap-3'>
-                      <PlatformIcon
-                        iconUrl={platform.iconUrl}
-                        name={platform.name}
-                      />
-                      <div className='min-w-0'>
-                        <div className='truncate font-medium'>
-                          {platform.name}
-                        </div>
-                        <div className='text-muted-foreground truncate text-sm'>
-                          {platform.url}
-                        </div>
-                      </div>
-                    </div>
-                    <Button
-                      type='button'
-                      size='sm'
-                      disabled={submitPending}
-                      onClick={() =>
-                        void handleBindPrimaryPlatform(platform.id)
-                      }
-                    >
-                      {selectedAccountDetail?.platformId === platform.id
-                        ? '已绑定'
-                        : '绑定'}
-                    </Button>
-                  </div>
-                ))}
-                {!filteredPlatforms.length ? (
-                  <div className='text-muted-foreground rounded-lg border border-dashed px-4 py-10 text-center text-sm'>
-                    当前没有可绑定的平台，请先在页面顶部新增平台。
-                  </div>
-                ) : null}
+                      return (
+                        <TableRow key={platform.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedPlatformIds.includes(
+                                platform.id
+                              )}
+                              onCheckedChange={(checked) =>
+                                setSelectedPlatformIds((current) =>
+                                  toggleSelectedIds(
+                                    current,
+                                    platform.id,
+                                    checked
+                                  )
+                                )
+                              }
+                              aria-label={`选择平台 ${platform.name}`}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className='flex min-w-0 items-center gap-3'>
+                              <PlatformIcon
+                                iconUrl={platform.iconUrl}
+                                name={platform.name}
+                              />
+                              <div className='min-w-0'>
+                                <div className='truncate font-medium'>
+                                  {platform.name}
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className='max-w-md'>
+                            <a
+                              href={platform.url}
+                              target='_blank'
+                              rel='noreferrer'
+                              className='text-muted-foreground inline-flex max-w-full items-center gap-1 truncate text-sm underline-offset-4 hover:underline'
+                            >
+                              <span className='truncate'>{platform.url}</span>
+                              <ExternalLink className='size-4 shrink-0' />
+                            </a>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant='outline'>
+                              {getPlatformRegionLabel(platform.region)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className='flex flex-wrap justify-end gap-2'>
+                              {activeSheet.accountId ? (
+                                <Button
+                                  type='button'
+                                  variant='outline'
+                                  size='sm'
+                                  disabled={submitPending || isCurrent}
+                                  onClick={() =>
+                                    void handleBindPrimaryPlatform(platform.id)
+                                  }
+                                >
+                                  {isCurrent ? '当前主平台' : '绑定'}
+                                </Button>
+                              ) : null}
+                              {access.canUpdate ? (
+                                <Button
+                                  type='button'
+                                  variant='outline'
+                                  size='sm'
+                                  onClick={() => openPlatformDialog(platform)}
+                                >
+                                  编辑
+                                </Button>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {!filteredPlatforms.length ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className='text-muted-foreground py-12 text-center'
+                        >
+                          暂无数据
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
               </div>
             </div>
           </>
         );
+      }
 
       case 'keys':
         return (
@@ -1585,7 +1720,7 @@ export function AccountsManagementClient({
                             onClick={() =>
                               setDeleteTarget({
                                 type: 'key',
-                                id: key.id,
+                                ids: [key.id],
                                 label: key.title
                               })
                             }
@@ -1727,7 +1862,7 @@ export function AccountsManagementClient({
                             onClick={() =>
                               setDeleteTarget({
                                 type: 'binding',
-                                id: binding.id,
+                                ids: [binding.id],
                                 label: binding.platformAccount
                               })
                             }
@@ -1904,209 +2039,212 @@ export function AccountsManagementClient({
           </>
         );
 
-      case 'sources':
+      case 'sources': {
+        const allSourcesSelected =
+          filteredRegistrationSources.length > 0 &&
+          filteredRegistrationSources.every((source) =>
+            selectedCatalogSourceIds.includes(source.id)
+          );
+
         return (
           <>
-            <SheetHeader>
-              <SheetTitle>
-                {activeSheet.accountId ? '注册源详情' : '注册源管理'}
-              </SheetTitle>
-              <SheetDescription>
-                注册源主数据会持续新增，当前支持维护来源库并同步账号绑定关系。
-              </SheetDescription>
+            <SheetHeader className='border-border/60 border-b pb-4'>
+              <SheetTitle>注册源</SheetTitle>
             </SheetHeader>
-            <Tabs
-              defaultValue={activeSheet.accountId ? 'binding' : 'catalog'}
-              className='mt-6'
-            >
-              <TabsList>
-                {activeSheet.accountId ? (
-                  <TabsTrigger value='binding'>当前账号绑定</TabsTrigger>
-                ) : null}
-                <TabsTrigger value='catalog'>来源库维护</TabsTrigger>
-              </TabsList>
-
-              {activeSheet.accountId ? (
-                <TabsContent value='binding' className='space-y-4'>
-                  <div className='rounded-lg border p-4'>
-                    <div className='mb-3 font-medium'>选择当前账号的注册源</div>
-                    <div className='grid gap-3'>
-                      {registrationSources.map((source) => {
-                        const checked = selectedSourceIds.includes(source.id);
-
-                        return (
-                          <label
-                            key={source.id}
-                            className='flex cursor-pointer items-start gap-3 rounded-md border p-3'
-                          >
-                            <Checkbox
-                              checked={checked}
-                              onCheckedChange={(nextChecked) => {
-                                setSelectedSourceIds((current) =>
-                                  nextChecked
-                                    ? [...current, source.id]
-                                    : current.filter((id) => id !== source.id)
-                                );
-                              }}
-                            />
-                            <div>
-                              <div className='font-medium'>{source.name}</div>
-                              <div className='text-muted-foreground text-sm'>
-                                标识：{source.code}
-                                {source.website ? ` / ${source.website}` : ''}
-                              </div>
-                            </div>
-                          </label>
-                        );
-                      })}
-                      {!registrationSources.length ? (
-                        <div className='text-muted-foreground rounded-md border border-dashed px-4 py-10 text-center text-sm'>
-                          当前还没有注册源，请先在“来源库维护”里新增。
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className='mt-4 flex justify-end'>
-                      <Button
-                        type='button'
-                        disabled={submitPending}
-                        onClick={() => void handleSourceBindingSave()}
-                      >
-                        {submitPending ? '保存中...' : '保存绑定'}
-                      </Button>
-                    </div>
-                  </div>
-                </TabsContent>
-              ) : null}
-
-              <TabsContent value='catalog' className='space-y-4'>
-                <div className='space-y-3'>
-                  {registrationSources.map((source) => (
-                    <div
-                      key={source.id}
-                      className='flex items-start justify-between rounded-lg border p-4'
-                    >
-                      <div>
-                        <div className='font-medium'>{source.name}</div>
-                        <div className='text-muted-foreground text-sm'>
-                          标识：{source.code}
-                        </div>
-                        <div className='text-muted-foreground text-sm'>
-                          官网：{source.website || '-'}
-                        </div>
-                        <div className='text-muted-foreground text-sm'>
-                          备注：{source.remark || '-'}
-                        </div>
-                      </div>
-                      <div className='flex gap-2'>
-                        {access.canUpdate ? (
-                          <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            onClick={() => beginEditSource(source)}
-                          >
-                            编辑
-                          </Button>
-                        ) : null}
-                        {access.canDelete ? (
-                          <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            onClick={() =>
-                              setDeleteTarget({
-                                type: 'source',
-                                id: source.id,
-                                label: source.name
-                              })
-                            }
-                          >
-                            删除
-                          </Button>
-                        ) : null}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {canManageNested ? (
-                  <form
-                    className='space-y-4 rounded-lg border p-4'
-                    onSubmit={handleRegistrationSourceSubmit}
+            <div className='flex h-full min-h-0 flex-col px-4 pb-4'>
+              <form
+                className='border-border/60 flex flex-col gap-2 border-b py-4 lg:flex-row lg:items-center'
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setSourceSearchKeyword(sourceSearchDraft.trim());
+                }}
+              >
+                <Input
+                  value={sourceSearchDraft}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setSourceSearchDraft(value);
+                    if (!value.trim()) {
+                      setSourceSearchKeyword('');
+                    }
+                  }}
+                  placeholder='搜索注册源名称 / 标识 / 官网'
+                  className='h-10 flex-1 rounded-xl px-4'
+                />
+                <div className='flex flex-wrap items-center justify-end gap-2'>
+                  <Button
+                    type='submit'
+                    variant='outline'
+                    className={toolbarButtonClassName}
+                    onMouseUp={(event) => event.currentTarget.blur()}
                   >
-                    <div className='font-medium'>
-                      {editingSourceId ? '编辑注册源' : '新增注册源'}
-                    </div>
-                    <Input
-                      value={registrationSourceForm.name}
-                      onChange={(event) =>
-                        setRegistrationSourceForm((current) => ({
-                          ...current,
-                          name: event.target.value
-                        }))
+                    搜索
+                  </Button>
+                  {access.canCreate ? (
+                    <Button
+                      type='button'
+                      variant='outline'
+                      className={toolbarButtonClassName}
+                      onClick={() => openSourceDialog()}
+                      onMouseUp={(event) => event.currentTarget.blur()}
+                    >
+                      新增
+                    </Button>
+                  ) : null}
+                  {access.canDelete ? (
+                    <Button
+                      type='button'
+                      variant='outline'
+                      className={toolbarButtonClassName}
+                      disabled={!selectedCatalogSourceIds.length}
+                      onClick={() =>
+                        setDeleteTarget({
+                          type: 'source',
+                          ids: selectedCatalogSourceIds,
+                          label:
+                            selectedCatalogSourceIds.length > 1
+                              ? `已选 ${selectedCatalogSourceIds.length} 个注册源`
+                              : registrationSources.find(
+                                  (source) =>
+                                    source.id === selectedCatalogSourceIds[0]
+                                )?.name || '当前注册源'
+                        })
                       }
-                      placeholder='名称'
-                    />
-                    <Input
-                      value={registrationSourceForm.code}
-                      onChange={(event) =>
-                        setRegistrationSourceForm((current) => ({
-                          ...current,
-                          code: event.target.value
-                        }))
-                      }
-                      placeholder='标识'
-                    />
-                    <Input
-                      value={registrationSourceForm.website}
-                      onChange={(event) =>
-                        setRegistrationSourceForm((current) => ({
-                          ...current,
-                          website: event.target.value
-                        }))
-                      }
-                      placeholder='官网地址'
-                    />
-                    <Textarea
-                      value={registrationSourceForm.remark}
-                      onChange={(event) =>
-                        setRegistrationSourceForm((current) => ({
-                          ...current,
-                          remark: event.target.value
-                        }))
-                      }
-                      placeholder='备注'
-                      rows={4}
-                    />
-                    <div className='flex items-center justify-end gap-2'>
-                      {editingSourceId ? (
-                        <Button
-                          type='button'
-                          variant='outline'
-                          onClick={() => {
-                            setRegistrationSourceForm(
-                              createDefaultRegistrationSourceForm()
-                            );
-                            setEditingSourceId(null);
-                          }}
+                      onMouseUp={(event) => event.currentTarget.blur()}
+                    >
+                      删除
+                    </Button>
+                  ) : null}
+                </div>
+              </form>
+
+              <div className='min-h-0 flex-1 overflow-auto py-4'>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className='w-12'>
+                        <Checkbox
+                          checked={
+                            allSourcesSelected
+                              ? true
+                              : selectedCatalogSourceIds.length
+                                ? 'indeterminate'
+                                : false
+                          }
+                          onCheckedChange={(checked) =>
+                            setSelectedCatalogSourceIds(
+                              checked
+                                ? filteredRegistrationSources.map(
+                                    (source) => source.id
+                                  )
+                                : []
+                            )
+                          }
+                          aria-label='全选注册源'
+                        />
+                      </TableHead>
+                      <TableHead>名称</TableHead>
+                      <TableHead>标识</TableHead>
+                      <TableHead>官网</TableHead>
+                      <TableHead>备注</TableHead>
+                      <TableHead className='w-[240px]'>操作</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredRegistrationSources.map((source) => {
+                      const isBound = selectedSourceIds.includes(source.id);
+
+                      return (
+                        <TableRow key={source.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedCatalogSourceIds.includes(
+                                source.id
+                              )}
+                              onCheckedChange={(checked) =>
+                                setSelectedCatalogSourceIds((current) =>
+                                  toggleSelectedIds(current, source.id, checked)
+                                )
+                              }
+                              aria-label={`选择注册源 ${source.name}`}
+                            />
+                          </TableCell>
+                          <TableCell className='font-medium'>
+                            {source.name}
+                          </TableCell>
+                          <TableCell>{source.code}</TableCell>
+                          <TableCell className='max-w-xs'>
+                            {source.website ? (
+                              <a
+                                href={source.website}
+                                target='_blank'
+                                rel='noreferrer'
+                                className='text-muted-foreground inline-flex max-w-full items-center gap-1 truncate text-sm underline-offset-4 hover:underline'
+                              >
+                                <span className='truncate'>
+                                  {source.website}
+                                </span>
+                                <ExternalLink className='size-4 shrink-0' />
+                              </a>
+                            ) : (
+                              '-'
+                            )}
+                          </TableCell>
+                          <TableCell className='max-w-sm'>
+                            <div className='truncate text-sm'>
+                              {source.remark || '-'}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className='flex flex-wrap justify-end gap-2'>
+                              {activeSheet.accountId ? (
+                                <Button
+                                  type='button'
+                                  variant='outline'
+                                  size='sm'
+                                  disabled={submitPending}
+                                  onClick={() =>
+                                    void handleSourceBindingToggle(
+                                      source.id,
+                                      !isBound
+                                    )
+                                  }
+                                >
+                                  {isBound ? '解绑' : '绑定'}
+                                </Button>
+                              ) : null}
+                              {access.canUpdate ? (
+                                <Button
+                                  type='button'
+                                  variant='outline'
+                                  size='sm'
+                                  onClick={() => openSourceDialog(source)}
+                                >
+                                  编辑
+                                </Button>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {!filteredRegistrationSources.length ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={6}
+                          className='text-muted-foreground py-12 text-center'
                         >
-                          取消编辑
-                        </Button>
-                      ) : null}
-                      <Button type='submit' disabled={submitPending}>
-                        {submitPending
-                          ? '提交中...'
-                          : editingSourceId
-                            ? '保存修改'
-                            : '新增注册源'}
-                      </Button>
-                    </div>
-                  </form>
-                ) : null}
-              </TabsContent>
-            </Tabs>
+                          暂无数据
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
           </>
         );
+      }
 
       case 'securities':
         return (
@@ -2149,7 +2287,7 @@ export function AccountsManagementClient({
                             onClick={() =>
                               setDeleteTarget({
                                 type: 'security',
-                                id: security.id,
+                                ids: [security.id],
                                 label: getSecurityTypeLabel(
                                   security.securityType
                                 )
@@ -2378,11 +2516,8 @@ export function AccountsManagementClient({
               账号管理承接主平台、密钥、绑定关系、注册源、密保和财富信息，支持按工作区独立维护。
             </CardDescription>
           </div>
-          <form
-            className='flex flex-col gap-3 xl:flex-row xl:items-center'
-            onSubmit={handleSearchSubmit}
-          >
-            <div className='grid flex-1 gap-3 md:grid-cols-2 xl:grid-cols-4'>
+          <form className='flex flex-col gap-3' onSubmit={handleSearchSubmit}>
+            <div className='flex flex-1 flex-wrap items-center gap-2'>
               <Input
                 value={searchDraft}
                 onChange={(event) => {
@@ -2394,6 +2529,7 @@ export function AccountsManagementClient({
                   }
                 }}
                 placeholder='搜索账号 / 平台 / 注册源'
+                className='min-w-[320px] flex-[2_1_420px] rounded-xl px-4'
               />
               <Select
                 value={statusFilter}
@@ -2402,7 +2538,7 @@ export function AccountsManagementClient({
                   setPage(1);
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger className='min-w-[150px] rounded-xl'>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -2419,7 +2555,7 @@ export function AccountsManagementClient({
                   setPage(1);
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger className='min-w-[150px] rounded-xl'>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -2435,7 +2571,7 @@ export function AccountsManagementClient({
                   setPage(1);
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger className='min-w-[150px] rounded-xl'>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -2447,34 +2583,24 @@ export function AccountsManagementClient({
                 </SelectContent>
               </Select>
             </div>
-            <div className='flex flex-wrap gap-2'>
-              <Button type='submit' variant='outline'>
+            <div className='flex flex-wrap items-center justify-end gap-2'>
+              <Button
+                type='submit'
+                variant='outline'
+                className={toolbarButtonClassName}
+                onMouseUp={(event) => event.currentTarget.blur()}
+              >
                 搜索
               </Button>
               {access.canCreate ? (
-                <>
-                  <Button
-                    type='button'
-                    onClick={() => void openAccountEditor()}
-                  >
-                    新增账号
-                  </Button>
-                  <Button
-                    type='button'
-                    variant='outline'
-                    onClick={() => openPlatformEditor()}
-                  >
-                    新增平台
-                  </Button>
-                </>
-              ) : null}
-              {canManageNested ? (
                 <Button
                   type='button'
                   variant='outline'
-                  onClick={() => void openAccountSheet('sources')}
+                  className={toolbarButtonClassName}
+                  onClick={() => void openAccountEditor()}
+                  onMouseUp={(event) => event.currentTarget.blur()}
                 >
-                  注册源管理
+                  新增
                 </Button>
               ) : null}
             </div>
@@ -2513,13 +2639,9 @@ export function AccountsManagementClient({
                     <TableCell>
                       {account.platformName ? (
                         <ActionLinkButton
-                          disabled={!access.canUpdate}
+                          disabled={!canManageNested}
                           onClick={() =>
-                            openPlatformEditor(
-                              platforms.find(
-                                (platform) => platform.id === account.platformId
-                              )
-                            )
+                            void openAccountSheet('platforms', account)
                           }
                         >
                           {account.platformName}
@@ -2528,7 +2650,7 @@ export function AccountsManagementClient({
                         <ActionLinkButton
                           disabled={!canManageNested}
                           onClick={() =>
-                            void openAccountSheet('platform-bind', account)
+                            void openAccountSheet('platforms', account)
                           }
                         >
                           绑定
@@ -2605,7 +2727,7 @@ export function AccountsManagementClient({
                             void openAccountSheet('sources', account)
                           }
                         >
-                          添加
+                          绑定
                         </ActionLinkButton>
                       )}
                     </TableCell>
@@ -2660,7 +2782,7 @@ export function AccountsManagementClient({
                             onClick={() =>
                               setDeleteTarget({
                                 type: 'account',
-                                id: account.id,
+                                ids: [account.id],
                                 label: account.account
                               })
                             }
@@ -2704,10 +2826,277 @@ export function AccountsManagementClient({
           }
         }}
       >
-        <SheetContent className='w-full overflow-y-auto sm:max-w-3xl'>
-          {renderSheetContent()}
+        <SheetContent
+          className={
+            wideSheetActive
+              ? 'w-full overflow-hidden p-0 sm:max-w-none md:min-w-[680px]'
+              : 'w-full overflow-y-auto sm:max-w-3xl'
+          }
+          style={
+            wideSheetActive
+              ? {
+                  width: wideSheetWidth,
+                  maxWidth: '96vw'
+                }
+              : undefined
+          }
+        >
+          {wideSheetActive ? (
+            <>
+              <div
+                className='absolute inset-y-0 left-0 z-20 hidden w-5 cursor-ew-resize items-center justify-center md:flex'
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  setResizingWideSheet(true);
+                }}
+              >
+                <div className='bg-border/80 h-24 w-[3px] rounded-full' />
+              </div>
+              <div className='h-full overflow-hidden pl-3'>
+                {renderSheetContent()}
+              </div>
+            </>
+          ) : (
+            renderSheetContent()
+          )}
         </SheetContent>
       </Sheet>
+
+      <Dialog
+        open={platformDialogOpen}
+        onOpenChange={(open) => {
+          setPlatformDialogOpen(open);
+          if (!open) {
+            setPlatformEditingId(null);
+            setPlatformForm(createDefaultPlatformForm());
+          }
+        }}
+      >
+        <DialogContent className='border-border/60 bg-background/95 overflow-hidden p-0 shadow-2xl sm:max-w-2xl'>
+          <DialogHeader className='border-border/60 border-b px-6 pt-6 pb-4'>
+            <DialogTitle>
+              {platformEditingId ? '编辑平台' : '新增平台'}
+            </DialogTitle>
+            <DialogDescription>
+              维护平台名称、地址与 Icon，地址会作为主链接展示。
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className='space-y-5 px-6 pt-5 pb-6'
+            onSubmit={handlePlatformSubmit}
+          >
+            <div className='grid gap-5 md:grid-cols-2'>
+              <div className='grid gap-2'>
+                <div className='text-sm font-medium'>平台名称</div>
+                <Input
+                  value={platformForm.name}
+                  onChange={(event) =>
+                    setPlatformForm((current) => ({
+                      ...current,
+                      name: event.target.value
+                    }))
+                  }
+                  placeholder='请输入平台名称'
+                  className='h-11 rounded-xl px-4'
+                />
+              </div>
+              <div className='grid gap-2'>
+                <div className='text-sm font-medium'>网域性质</div>
+                <Select
+                  value={platformForm.region}
+                  onValueChange={(value: ManagedPlatformSummary['region']) =>
+                    setPlatformForm((current) => ({
+                      ...current,
+                      region: value
+                    }))
+                  }
+                >
+                  <SelectTrigger className='h-11 rounded-xl px-4'>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='mainland'>内地</SelectItem>
+                    <SelectItem value='hk_mo_tw'>港澳台</SelectItem>
+                    <SelectItem value='overseas'>海外</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className='grid gap-2'>
+              <div className='text-sm font-medium'>平台地址</div>
+              <Input
+                value={platformForm.url}
+                onChange={(event) =>
+                  setPlatformForm((current) => ({
+                    ...current,
+                    url: event.target.value
+                  }))
+                }
+                placeholder='https://example.com'
+                className='h-11 rounded-xl px-4'
+              />
+            </div>
+
+            <div className='grid gap-2'>
+              <div className='text-sm font-medium'>平台 Icon 地址</div>
+              <Input
+                value={platformForm.iconUrl}
+                onChange={(event) =>
+                  setPlatformForm((current) => ({
+                    ...current,
+                    iconUrl: event.target.value
+                  }))
+                }
+                placeholder='留空则自动使用 /favicon.ico'
+                className='h-11 rounded-xl px-4'
+              />
+            </div>
+
+            <DialogFooter className='border-border/60 border-t px-0 pt-4'>
+              <Button
+                type='button'
+                variant='outline'
+                className='rounded-xl'
+                onClick={() => {
+                  setPlatformDialogOpen(false);
+                  setPlatformEditingId(null);
+                  setPlatformForm(createDefaultPlatformForm());
+                }}
+              >
+                取消
+              </Button>
+              <Button
+                type='submit'
+                className='rounded-xl'
+                disabled={submitPending}
+              >
+                {submitPending
+                  ? '保存中...'
+                  : platformEditingId
+                    ? '保存修改'
+                    : '创建平台'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={sourceDialogOpen}
+        onOpenChange={(open) => {
+          setSourceDialogOpen(open);
+          if (!open) {
+            setEditingSourceId(null);
+            setRegistrationSourceForm(createDefaultRegistrationSourceForm());
+          }
+        }}
+      >
+        <DialogContent className='border-border/60 bg-background/95 overflow-hidden p-0 shadow-2xl sm:max-w-2xl'>
+          <DialogHeader className='border-border/60 border-b px-6 pt-6 pb-4'>
+            <DialogTitle>
+              {editingSourceId ? '编辑注册源' : '新增注册源'}
+            </DialogTitle>
+            <DialogDescription>
+              使用更宽松的留白维护注册源基础信息，列表里的编辑会在这里打开。
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className='space-y-5 px-6 pt-5 pb-6'
+            onSubmit={handleRegistrationSourceSubmit}
+          >
+            <div className='grid gap-5 md:grid-cols-2'>
+              <div className='grid gap-2'>
+                <div className='text-sm font-medium'>名称</div>
+                <Input
+                  value={registrationSourceForm.name}
+                  onChange={(event) =>
+                    setRegistrationSourceForm((current) => ({
+                      ...current,
+                      name: event.target.value
+                    }))
+                  }
+                  placeholder='请输入注册源名称'
+                  className='h-11 rounded-xl px-4'
+                />
+              </div>
+              <div className='grid gap-2'>
+                <div className='text-sm font-medium'>标识</div>
+                <Input
+                  value={registrationSourceForm.code}
+                  onChange={(event) =>
+                    setRegistrationSourceForm((current) => ({
+                      ...current,
+                      code: event.target.value
+                    }))
+                  }
+                  placeholder='请输入唯一标识'
+                  className='h-11 rounded-xl px-4'
+                />
+              </div>
+            </div>
+
+            <div className='grid gap-2'>
+              <div className='text-sm font-medium'>官网地址</div>
+              <Input
+                value={registrationSourceForm.website}
+                onChange={(event) =>
+                  setRegistrationSourceForm((current) => ({
+                    ...current,
+                    website: event.target.value
+                  }))
+                }
+                placeholder='https://example.com'
+                className='h-11 rounded-xl px-4'
+              />
+            </div>
+
+            <div className='grid gap-2'>
+              <div className='text-sm font-medium'>备注</div>
+              <Textarea
+                value={registrationSourceForm.remark}
+                onChange={(event) =>
+                  setRegistrationSourceForm((current) => ({
+                    ...current,
+                    remark: event.target.value
+                  }))
+                }
+                placeholder='补充说明来源渠道、账号适用范围等'
+                rows={5}
+                className='rounded-2xl px-4 py-3'
+              />
+            </div>
+
+            <DialogFooter className='border-border/60 border-t px-0 pt-4'>
+              <Button
+                type='button'
+                variant='outline'
+                className='rounded-xl'
+                onClick={() => {
+                  setSourceDialogOpen(false);
+                  setEditingSourceId(null);
+                  setRegistrationSourceForm(
+                    createDefaultRegistrationSourceForm()
+                  );
+                }}
+              >
+                取消
+              </Button>
+              <Button
+                type='submit'
+                className='rounded-xl'
+                disabled={submitPending}
+              >
+                {submitPending
+                  ? '保存中...'
+                  : editingSourceId
+                    ? '保存修改'
+                    : '创建注册源'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmActionDialog
         open={Boolean(deleteTarget)}
@@ -2717,7 +3106,15 @@ export function AccountsManagementClient({
           }
         }}
         title='确认删除'
-        description={`确认删除“${deleteTarget?.label || ''}”吗？删除后无法恢复。`}
+        description={
+          deleteTarget
+            ? `确认删除${
+                deleteTarget.label.startsWith('已选')
+                  ? deleteTarget.label
+                  : `“${deleteTarget.label}”`
+              }吗？删除后无法恢复。`
+            : '确认删除当前内容吗？删除后无法恢复。'
+        }
         confirmLabel='确认删除'
         pending={deletePending}
         onConfirm={() => void handleDeleteConfirm()}
