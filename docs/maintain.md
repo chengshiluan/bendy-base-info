@@ -37,6 +37,19 @@
 
 ## 最近开发记录
 
+### 2026-04-01 - 账号列表批量逻辑删除与表头规范调整
+
+- 完成事项：
+  - 将账号列表表头中的 `平台 Icon` 调整为更简洁的 `icon`
+  - 为账号列表补充单选、多选与全选能力，并在顶部 `新增` 按钮后补上 `删除` 按钮，支持按当前页选中账号后批量删除
+  - 将账号删除从物理删除改为逻辑删除，实际行为调整为把账号状态标记为 `cancelled`，避免直接移除数据记录
+- 验证：
+  - 在 Node `24.x` 环境执行 `npx -y node@24 ./node_modules/.bin/eslint src/features/management/components/accounts-management-client.tsx src/lib/account-management/mutations.ts`，通过
+  - 在 Node `24.x` 环境执行 `npx -y node@24 ./node_modules/.bin/tsc -p tsconfig.json --noEmit`，通过
+  - 执行 `npx prettier --write src/features/management/components/accounts-management-client.tsx src/lib/account-management/mutations.ts`，完成
+- 后续待办：
+  - 继续按 `docs/designUI.md` 把新增账号 / 编辑账号入口的旧抽屉表单改造成更符合规范的弹窗编辑体验
+
 ### 2026-04-01 - 账号管理 UI 设计规范沉淀与抽屉交互统一
 
 - 完成事项：

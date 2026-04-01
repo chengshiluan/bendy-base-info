@@ -416,7 +416,11 @@ export async function deleteManagedAccount(
   const account = await ensureAccountBelongsToWorkspace(accountId, workspaceId);
 
   await database
-    .delete(schema.accountManagementAccounts)
+    .update(schema.accountManagementAccounts)
+    .set({
+      status: 'cancelled',
+      updatedAt: new Date()
+    })
     .where(eq(schema.accountManagementAccounts.id, accountId));
 
   await recordAuditLog({
@@ -425,13 +429,14 @@ export async function deleteManagedAccount(
     action: 'account_management.account.delete',
     entityType: 'account_management_account',
     entityId: String(accountId),
-    summary: `删除了账号 ${account.account}。`,
+    summary: `将账号 ${account.account} 标记为已注销。`,
     metadata: {
-      accountId
+      accountId,
+      deleteMode: 'logical'
     }
   });
 
-  return account;
+  return getManagedAccountDetail(accountId, workspaceId);
 }
 
 export async function bindManagedAccountPrimaryPlatform(

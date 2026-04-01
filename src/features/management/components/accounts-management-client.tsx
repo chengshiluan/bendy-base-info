@@ -357,6 +357,7 @@ export function AccountsManagementClient({
   );
   const [wealthDialogOpen, setWealthDialogOpen] = useState(false);
   const [selectedSourceIds, setSelectedSourceIds] = useState<number[]>([]);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<number[]>([]);
   const [selectedPlatformIds, setSelectedPlatformIds] = useState<number[]>([]);
   const [selectedCatalogSourceIds, setSelectedCatalogSourceIds] = useState<
     number[]
@@ -408,6 +409,9 @@ export function AccountsManagementClient({
     confidenceFilter === 'all'
       ? '置信度'
       : getAccountConfidenceLabel(confidenceFilter);
+  const allAccountsSelected =
+    accounts.length > 0 &&
+    accounts.every((account) => selectedAccountIds.includes(account.id));
 
   const filteredPlatforms = useMemo(() => {
     const keyword = platformSearchKeyword.trim().toLowerCase();
@@ -567,6 +571,7 @@ export function AccountsManagementClient({
     setWealthForm(createDefaultWealthForm());
     setEditingWealthIndex(null);
     setWealthDialogOpen(false);
+    setSelectedAccountIds([]);
     setSelectedSourceIds([]);
     setSelectedPlatformIds([]);
     setSelectedCatalogSourceIds([]);
@@ -681,6 +686,12 @@ export function AccountsManagementClient({
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [resizingWideSheet]);
+
+  useEffect(() => {
+    setSelectedAccountIds((current) =>
+      current.filter((id) => accounts.some((account) => account.id === id))
+    );
+  }, [accounts]);
 
   function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1371,6 +1382,7 @@ export function AccountsManagementClient({
           toast.success(
             deleteTarget.ids.length > 1 ? '账号已批量删除。' : '账号已删除。'
           );
+          setSelectedAccountIds([]);
           closeSheet();
           break;
         case 'platform':
@@ -2963,6 +2975,29 @@ export function AccountsManagementClient({
                   新增
                 </Button>
               ) : null}
+              {access.canDelete ? (
+                <Button
+                  type='button'
+                  variant='outline'
+                  className={toolbarButtonClassName}
+                  disabled={!selectedAccountIds.length}
+                  onClick={() =>
+                    setDeleteTarget({
+                      type: 'account',
+                      ids: selectedAccountIds,
+                      label:
+                        selectedAccountIds.length > 1
+                          ? `已选 ${selectedAccountIds.length} 个账号`
+                          : accounts.find(
+                              (account) => account.id === selectedAccountIds[0]
+                            )?.account || '当前账号'
+                    })
+                  }
+                  onMouseUp={(event) => event.currentTarget.blur()}
+                >
+                  删除
+                </Button>
+              ) : null}
             </div>
           </form>
         </CardHeader>
@@ -2971,7 +3006,24 @@ export function AccountsManagementClient({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>平台 Icon</TableHead>
+                  <TableHead className='w-12'>
+                    <Checkbox
+                      checked={
+                        allAccountsSelected
+                          ? true
+                          : selectedAccountIds.length
+                            ? 'indeterminate'
+                            : false
+                      }
+                      onCheckedChange={(checked) =>
+                        setSelectedAccountIds(
+                          checked ? accounts.map((account) => account.id) : []
+                        )
+                      }
+                      aria-label='全选账号'
+                    />
+                  </TableHead>
+                  <TableHead>icon</TableHead>
                   <TableHead>平台</TableHead>
                   <TableHead>账号</TableHead>
                   <TableHead>属性</TableHead>
@@ -2990,6 +3042,17 @@ export function AccountsManagementClient({
               <TableBody>
                 {accounts.map((account) => (
                   <TableRow key={account.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedAccountIds.includes(account.id)}
+                        onCheckedChange={(checked) =>
+                          setSelectedAccountIds((current) =>
+                            toggleSelectedIds(current, account.id, checked)
+                          )
+                        }
+                        aria-label={`选择账号 ${account.account}`}
+                      />
+                    </TableCell>
                     <TableCell>
                       <PlatformIcon
                         iconUrl={account.platformIconUrl}
@@ -3157,7 +3220,7 @@ export function AccountsManagementClient({
                 {!accounts.length ? (
                   <TableRow>
                     <TableCell
-                      colSpan={14}
+                      colSpan={15}
                       className='text-muted-foreground py-10 text-center'
                     >
                       当前没有匹配的账号记录。
