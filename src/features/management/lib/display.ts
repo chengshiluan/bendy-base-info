@@ -1,4 +1,9 @@
 import type {
+  ManagedAccountDetail,
+  ManagedAccountSecuritySummary,
+  ManagedAccountSummary,
+  ManagedPlatformSummary,
+  ManagedRegistrationSourceSummary,
   NotificationSummary,
   TicketSummary,
   UserSummary
@@ -73,4 +78,87 @@ export function getTicketPriorityLabel(priority: TicketSummary['priority']) {
     default:
       return priority;
   }
+}
+
+export function getAccountAttributeLabel(
+  attribute: ManagedAccountSummary['attribute']
+) {
+  switch (attribute) {
+    case 'self_hosted':
+      return '自托管';
+    case 'third_party':
+      return '三方';
+    default:
+      return attribute;
+  }
+}
+
+export function getAccountConfidenceLabel(
+  confidence: ManagedAccountSummary['confidence']
+) {
+  switch (confidence) {
+    case 'very_high':
+      return '极高';
+    case 'high':
+      return '高';
+    case 'medium':
+      return '中';
+    case 'low':
+      return '低';
+    default:
+      return confidence;
+  }
+}
+
+export function getAccountStatusLabel(status: ManagedAccountSummary['status']) {
+  switch (status) {
+    case 'cancelled':
+      return '已注销';
+    case 'available':
+      return '可用';
+    case 'banned':
+      return '封禁';
+    default:
+      return status;
+  }
+}
+
+export function getPlatformRegionLabel(
+  region: ManagedPlatformSummary['region']
+) {
+  switch (region) {
+    case 'overseas':
+      return '海外';
+    case 'mainland':
+      return '内地';
+    case 'hk_mo_tw':
+      return '港澳台';
+    default:
+      return region;
+  }
+}
+
+export function getSecurityTypeLabel(
+  securityType:
+    | ManagedAccountSecuritySummary['securityType']
+    | ManagedAccountDetail['securities'][number]['securityType']
+) {
+  switch (securityType) {
+    case 'question':
+      return '问题验证';
+    case 'two_factor':
+      return '2FA验证';
+    case 'contact':
+      return '联系人';
+    case 'emergency_email':
+      return '紧急邮箱';
+    default:
+      return securityType;
+  }
+}
+
+export function getRegistrationSourceLabel(
+  source: ManagedRegistrationSourceSummary
+) {
+  return source.name;
 }

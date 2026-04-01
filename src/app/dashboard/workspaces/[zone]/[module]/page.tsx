@@ -17,6 +17,10 @@ const moduleConfig: Record<
   Record<string, { title: string; description: string }>
 > = {
   ops: {
+    accounts: {
+      title: '账号管理',
+      description: '聚焦当前工作区下的账号、平台、密钥、绑定与资产信息。'
+    },
     system: {
       title: '系统管理',
       description: '承接当前工作区的系统设置、运行开关与基础运维配置。'
@@ -35,10 +39,6 @@ const moduleConfig: Record<
     }
   },
   dev: {
-    accounts: {
-      title: '账号管理',
-      description: '聚焦当前工作区下的开发账号、访问凭据与身份协同。'
-    },
     projects: {
       title: '项目管理',
       description: '管理当前工作区的项目清单、推进状态与协作边界。'

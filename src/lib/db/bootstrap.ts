@@ -192,6 +192,41 @@ end
 $$`,
   `do $$
 begin
+  create type account_attribute as enum ('self_hosted', 'third_party');
+exception
+  when duplicate_object then null;
+end
+$$`,
+  `do $$
+begin
+  create type account_confidence as enum ('very_high', 'high', 'medium', 'low');
+exception
+  when duplicate_object then null;
+end
+$$`,
+  `do $$
+begin
+  create type account_status as enum ('cancelled', 'available', 'banned');
+exception
+  when duplicate_object then null;
+end
+$$`,
+  `do $$
+begin
+  create type platform_region as enum ('overseas', 'mainland', 'hk_mo_tw');
+exception
+  when duplicate_object then null;
+end
+$$`,
+  `do $$
+begin
+  create type account_security_type as enum ('question', 'two_factor', 'contact', 'emergency_email');
+exception
+  when duplicate_object then null;
+end
+$$`,
+  `do $$
+begin
   create type file_entity_type as enum ('ticket', 'ticket_comment', 'workspace', 'general');
 exception
   when duplicate_object then null;
@@ -481,7 +516,132 @@ $$`,
     add column if not exists entity_id varchar(120),
     add column if not exists summary text,
     add column if not exists metadata jsonb default '{}'::jsonb,
-    add column if not exists created_at timestamptz default now()`
+    add column if not exists created_at timestamptz default now()`,
+  `create table if not exists account_mang_platforms (
+    id integer primary key generated always as identity,
+    workspace_id uuid not null references workspaces(id) on delete cascade,
+    name varchar(120) not null,
+    url text not null,
+    icon_url text not null,
+    region platform_region not null default 'mainland',
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+  )`,
+  `alter table account_mang_platforms
+    add column if not exists id integer generated always as identity,
+    add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+    add column if not exists name varchar(120),
+    add column if not exists url text,
+    add column if not exists icon_url text,
+    add column if not exists region platform_region default 'mainland',
+    add column if not exists created_at timestamptz default now(),
+    add column if not exists updated_at timestamptz default now()`,
+  `create table if not exists account_mang_accounts (
+    id integer primary key generated always as identity,
+    workspace_id uuid not null references workspaces(id) on delete cascade,
+    platform_id integer references account_mang_platforms(id) on delete set null,
+    account varchar(255) not null,
+    attribute account_attribute not null default 'self_hosted',
+    confidence account_confidence not null default 'medium',
+    password_hash varchar(32),
+    registered_at timestamptz,
+    status account_status not null default 'available',
+    wealth_json text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+  )`,
+  `alter table account_mang_accounts
+    add column if not exists id integer generated always as identity,
+    add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+    add column if not exists platform_id integer references account_mang_platforms(id) on delete set null,
+    add column if not exists account varchar(255),
+    add column if not exists attribute account_attribute default 'self_hosted',
+    add column if not exists confidence account_confidence default 'medium',
+    add column if not exists password_hash varchar(32),
+    add column if not exists registered_at timestamptz,
+    add column if not exists status account_status default 'available',
+    add column if not exists wealth_json text,
+    add column if not exists created_at timestamptz default now(),
+    add column if not exists updated_at timestamptz default now()`,
+  `create table if not exists account_mang_account_keys (
+    id integer primary key generated always as identity,
+    account_id integer not null references account_mang_accounts(id) on delete cascade,
+    title varchar(120) not null,
+    content text not null,
+    expires_at timestamptz,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+  )`,
+  `alter table account_mang_account_keys
+    add column if not exists id integer generated always as identity,
+    add column if not exists account_id integer references account_mang_accounts(id) on delete cascade,
+    add column if not exists title varchar(120),
+    add column if not exists content text,
+    add column if not exists expires_at timestamptz,
+    add column if not exists created_at timestamptz default now(),
+    add column if not exists updated_at timestamptz default now()`,
+  `create table if not exists account_mang_account_bindings (
+    id integer primary key generated always as identity,
+    account_id integer not null references account_mang_accounts(id) on delete cascade,
+    platform_id integer references account_mang_platforms(id) on delete set null,
+    platform_account varchar(255) not null,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+  )`,
+  `alter table account_mang_account_bindings
+    add column if not exists id integer generated always as identity,
+    add column if not exists account_id integer references account_mang_accounts(id) on delete cascade,
+    add column if not exists platform_id integer references account_mang_platforms(id) on delete set null,
+    add column if not exists platform_account varchar(255),
+    add column if not exists created_at timestamptz default now(),
+    add column if not exists updated_at timestamptz default now()`,
+  `create table if not exists account_mang_registration_sources (
+    id integer primary key generated always as identity,
+    workspace_id uuid not null references workspaces(id) on delete cascade,
+    name varchar(120) not null,
+    code varchar(120) not null,
+    website text,
+    remark text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+  )`,
+  `alter table account_mang_registration_sources
+    add column if not exists id integer generated always as identity,
+    add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+    add column if not exists name varchar(120),
+    add column if not exists code varchar(120),
+    add column if not exists website text,
+    add column if not exists remark text,
+    add column if not exists created_at timestamptz default now(),
+    add column if not exists updated_at timestamptz default now()`,
+  'create unique index if not exists account_mang_registration_sources_workspace_code_idx on account_mang_registration_sources (workspace_id, code)',
+  `create table if not exists account_mang_account_registration_sources (
+    account_id integer not null references account_mang_accounts(id) on delete cascade,
+    source_id integer not null references account_mang_registration_sources(id) on delete cascade,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    primary key (account_id, source_id)
+  )`,
+  `alter table account_mang_account_registration_sources
+    add column if not exists account_id integer references account_mang_accounts(id) on delete cascade,
+    add column if not exists source_id integer references account_mang_registration_sources(id) on delete cascade,
+    add column if not exists created_at timestamptz default now(),
+    add column if not exists updated_at timestamptz default now()`,
+  `create table if not exists account_mang_account_securities (
+    id integer primary key generated always as identity,
+    account_id integer not null references account_mang_accounts(id) on delete cascade,
+    security_type account_security_type not null default 'question',
+    content text not null,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+  )`,
+  `alter table account_mang_account_securities
+    add column if not exists id integer generated always as identity,
+    add column if not exists account_id integer references account_mang_accounts(id) on delete cascade,
+    add column if not exists security_type account_security_type default 'question',
+    add column if not exists content text,
+    add column if not exists created_at timestamptz default now(),
+    add column if not exists updated_at timestamptz default now()`
 ] as const;
 
 function formatSqlLiteral(value: string) {
