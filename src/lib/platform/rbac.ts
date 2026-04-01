@@ -294,6 +294,30 @@ const permissionTreeNodes: PermissionMenuNode[] = [
     icon: 'settings',
     children: [
       {
+        key: 'accounts',
+        title: '账号管理',
+        route: '/dashboard/workspaces/ops/accounts',
+        description: '允许访问运维账号管理页。',
+        scope: 'workspace',
+        actions: [
+          {
+            key: 'create',
+            title: '新增账号',
+            description: '允许新增账号及其关联信息。'
+          },
+          {
+            key: 'update',
+            title: '编辑账号',
+            description: '允许编辑账号、平台、密钥、绑定和财富信息。'
+          },
+          {
+            key: 'delete',
+            title: '删除账号',
+            description: '允许删除账号及其关联数据。'
+          }
+        ]
+      },
+      {
         key: 'system',
         title: '系统管理',
         route: '/dashboard/workspaces/ops/system',
@@ -331,13 +355,6 @@ const permissionTreeNodes: PermissionMenuNode[] = [
     scope: 'workspace',
     icon: 'laptop',
     children: [
-      {
-        key: 'accounts',
-        title: '账号管理',
-        route: '/dashboard/workspaces/dev/accounts',
-        description: '允许访问账号管理占位页。',
-        scope: 'workspace'
-      },
       {
         key: 'projects',
         title: '项目管理',

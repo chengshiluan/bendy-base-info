@@ -169,3 +169,85 @@ export interface PaginatedResult<T> {
   items: T[];
   pagination: PaginationMeta;
 }
+
+export interface ManagedPlatformSummary {
+  id: number;
+  workspaceId: string;
+  name: string;
+  url: string;
+  iconUrl: string;
+  region: 'overseas' | 'mainland' | 'hk_mo_tw';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ManagedRegistrationSourceSummary {
+  id: number;
+  workspaceId: string;
+  name: string;
+  code: string;
+  website: string | null;
+  remark: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ManagedAccountKeySummary {
+  id: number;
+  title: string;
+  content: string;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ManagedAccountBindingSummary {
+  id: number;
+  platformId: number | null;
+  platformName: string | null;
+  platformIconUrl: string | null;
+  platformUrl: string | null;
+  platformAccount: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ManagedAccountSecuritySummary {
+  id: number;
+  securityType: 'question' | 'two_factor' | 'contact' | 'emergency_email';
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ManagedWealthEntry {
+  key: string;
+  value: string;
+}
+
+export interface ManagedAccountSummary {
+  id: number;
+  workspaceId: string;
+  platformId: number | null;
+  platformName: string | null;
+  platformIconUrl: string | null;
+  platformUrl: string | null;
+  account: string;
+  attribute: 'self_hosted' | 'third_party';
+  confidence: 'very_high' | 'high' | 'medium' | 'low';
+  keyCount: number;
+  bindingCount: number;
+  registrationSources: ManagedRegistrationSourceSummary[];
+  hasPassword: boolean;
+  securityCount: number;
+  registeredAt: string | null;
+  status: 'cancelled' | 'available' | 'banned';
+  wealthEntries: ManagedWealthEntry[];
+}
+
+export interface ManagedAccountDetail extends ManagedAccountSummary {
+  keys: ManagedAccountKeySummary[];
+  bindings: ManagedAccountBindingSummary[];
+  securities: ManagedAccountSecuritySummary[];
+  registrationSourceIds: number[];
+}

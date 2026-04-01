@@ -57,6 +57,37 @@ export const notificationLevelEnum = pgEnum('notification_level', [
   'error'
 ]);
 
+export const accountAttributeEnum = pgEnum('account_attribute', [
+  'self_hosted',
+  'third_party'
+]);
+
+export const accountConfidenceEnum = pgEnum('account_confidence', [
+  'very_high',
+  'high',
+  'medium',
+  'low'
+]);
+
+export const accountStatusEnum = pgEnum('account_status', [
+  'cancelled',
+  'available',
+  'banned'
+]);
+
+export const platformRegionEnum = pgEnum('platform_region', [
+  'overseas',
+  'mainland',
+  'hk_mo_tw'
+]);
+
+export const accountSecurityTypeEnum = pgEnum('account_security_type', [
+  'question',
+  'two_factor',
+  'contact',
+  'emergency_email'
+]);
+
 export const fileEntityTypeEnum = pgEnum('file_entity_type', [
   'ticket',
   'ticket_comment',
@@ -366,6 +397,123 @@ export const auditLogs = pgTable('audit_logs', {
     .notNull()
 });
 
+export const accountManagementPlatforms = pgTable('account_mang_platforms', {
+  id: integer('id').generatedAlwaysAsIdentity().primaryKey(),
+  workspaceId: uuid('workspace_id')
+    .notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 120 }).notNull(),
+  url: text('url').notNull(),
+  iconUrl: text('icon_url').notNull(),
+  region: platformRegionEnum('region').default('mainland').notNull(),
+  ...timestamps
+});
+
+export const accountManagementAccounts = pgTable('account_mang_accounts', {
+  id: integer('id').generatedAlwaysAsIdentity().primaryKey(),
+  workspaceId: uuid('workspace_id')
+    .notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  platformId: integer('platform_id').references(
+    () => accountManagementPlatforms.id,
+    {
+      onDelete: 'set null'
+    }
+  ),
+  account: varchar('account', { length: 255 }).notNull(),
+  attribute: accountAttributeEnum('attribute').default('self_hosted').notNull(),
+  confidence: accountConfidenceEnum('confidence').default('medium').notNull(),
+  passwordHash: varchar('password_hash', { length: 32 }),
+  registeredAt: timestamp('registered_at', { withTimezone: true }),
+  status: accountStatusEnum('status').default('available').notNull(),
+  wealthJson: text('wealth_json'),
+  ...timestamps
+});
+
+export const accountManagementKeys = pgTable('account_mang_account_keys', {
+  id: integer('id').generatedAlwaysAsIdentity().primaryKey(),
+  accountId: integer('account_id')
+    .notNull()
+    .references(() => accountManagementAccounts.id, { onDelete: 'cascade' }),
+  title: varchar('title', { length: 120 }).notNull(),
+  content: text('content').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  ...timestamps
+});
+
+export const accountManagementBindings = pgTable(
+  'account_mang_account_bindings',
+  {
+    id: integer('id').generatedAlwaysAsIdentity().primaryKey(),
+    accountId: integer('account_id')
+      .notNull()
+      .references(() => accountManagementAccounts.id, { onDelete: 'cascade' }),
+    platformId: integer('platform_id').references(
+      () => accountManagementPlatforms.id,
+      {
+        onDelete: 'set null'
+      }
+    ),
+    platformAccount: varchar('platform_account', { length: 255 }).notNull(),
+    ...timestamps
+  }
+);
+
+export const accountManagementRegistrationSources = pgTable(
+  'account_mang_registration_sources',
+  {
+    id: integer('id').generatedAlwaysAsIdentity().primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 120 }).notNull(),
+    code: varchar('code', { length: 120 }).notNull(),
+    website: text('website'),
+    remark: text('remark'),
+    ...timestamps
+  },
+  (table) => ({
+    workspaceCodeIdx: uniqueIndex(
+      'account_mang_registration_sources_workspace_code_idx'
+    ).on(table.workspaceId, table.code)
+  })
+);
+
+export const accountManagementAccountRegistrationSources = pgTable(
+  'account_mang_account_registration_sources',
+  {
+    accountId: integer('account_id')
+      .notNull()
+      .references(() => accountManagementAccounts.id, { onDelete: 'cascade' }),
+    sourceId: integer('source_id')
+      .notNull()
+      .references(() => accountManagementRegistrationSources.id, {
+        onDelete: 'cascade'
+      }),
+    ...timestamps
+  },
+  (table) => ({
+    pk: primaryKey({
+      columns: [table.accountId, table.sourceId]
+    })
+  })
+);
+
+export const accountManagementSecurities = pgTable(
+  'account_mang_account_securities',
+  {
+    id: integer('id').generatedAlwaysAsIdentity().primaryKey(),
+    accountId: integer('account_id')
+      .notNull()
+      .references(() => accountManagementAccounts.id, { onDelete: 'cascade' }),
+    securityType: accountSecurityTypeEnum('security_type')
+      .default('question')
+      .notNull(),
+    content: text('content').notNull(),
+    ...timestamps
+  }
+);
+
 export const schema = {
   users,
   workspaces,
@@ -380,5 +528,12 @@ export const schema = {
   tickets,
   ticketComments,
   fileAssets,
-  auditLogs
+  auditLogs,
+  accountManagementPlatforms,
+  accountManagementAccounts,
+  accountManagementKeys,
+  accountManagementBindings,
+  accountManagementRegistrationSources,
+  accountManagementAccountRegistrationSources,
+  accountManagementSecurities
 };
