@@ -398,6 +398,16 @@ export function AccountsManagementClient({
     activeSheet.type === 'wealth';
   const toolbarButtonClassName =
     'h-10 rounded-xl px-4 focus-visible:bg-white focus-visible:text-black active:bg-white active:text-black';
+  const statusTriggerLabel =
+    statusFilter === 'all' ? '状态' : getAccountStatusLabel(statusFilter);
+  const attributeTriggerLabel =
+    attributeFilter === 'all'
+      ? '属性'
+      : getAccountAttributeLabel(attributeFilter);
+  const confidenceTriggerLabel =
+    confidenceFilter === 'all'
+      ? '置信度'
+      : getAccountConfidenceLabel(confidenceFilter);
 
   const filteredPlatforms = useMemo(() => {
     const keyword = platformSearchKeyword.trim().toLowerCase();
@@ -2862,8 +2872,11 @@ export function AccountsManagementClient({
               账号管理承接主平台、密钥、绑定关系、注册源、密保和财富信息，支持按工作区独立维护。
             </CardDescription>
           </div>
-          <form className='flex flex-col gap-3' onSubmit={handleSearchSubmit}>
-            <div className='flex flex-1 flex-wrap items-center gap-2'>
+          <form
+            className='flex flex-col gap-3 lg:flex-row lg:items-center'
+            onSubmit={handleSearchSubmit}
+          >
+            <div className='border-border/60 bg-background/40 flex min-w-0 flex-1 flex-wrap items-center gap-2 rounded-2xl border p-2 md:flex-nowrap'>
               <Input
                 value={searchDraft}
                 onChange={(event) => {
@@ -2875,8 +2888,9 @@ export function AccountsManagementClient({
                   }
                 }}
                 placeholder='搜索账号 / 平台 / 注册源'
-                className='min-w-[320px] flex-[2_1_420px] rounded-xl px-4'
+                className='h-10 min-w-[280px] flex-[1_1_360px] border-0 bg-transparent px-3 shadow-none focus-visible:border-transparent focus-visible:ring-0'
               />
+              <div className='bg-border/60 hidden h-7 w-px shrink-0 md:block' />
               <Select
                 value={statusFilter}
                 onValueChange={(value) => {
@@ -2884,11 +2898,11 @@ export function AccountsManagementClient({
                   setPage(1);
                 }}
               >
-                <SelectTrigger className='min-w-[150px] rounded-xl'>
-                  <SelectValue />
+                <SelectTrigger className='h-10 min-w-[112px] border-0 bg-transparent px-3 shadow-none focus-visible:border-transparent focus-visible:ring-0'>
+                  <span className='truncate'>{statusTriggerLabel}</span>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value='all'>全部状态</SelectItem>
+                  <SelectItem value='all'>全部</SelectItem>
                   <SelectItem value='available'>可用</SelectItem>
                   <SelectItem value='banned'>封禁</SelectItem>
                   <SelectItem value='cancelled'>已注销</SelectItem>
@@ -2901,11 +2915,11 @@ export function AccountsManagementClient({
                   setPage(1);
                 }}
               >
-                <SelectTrigger className='min-w-[150px] rounded-xl'>
-                  <SelectValue />
+                <SelectTrigger className='h-10 min-w-[112px] border-0 bg-transparent px-3 shadow-none focus-visible:border-transparent focus-visible:ring-0'>
+                  <span className='truncate'>{attributeTriggerLabel}</span>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value='all'>全部属性</SelectItem>
+                  <SelectItem value='all'>全部</SelectItem>
                   <SelectItem value='self_hosted'>自托管</SelectItem>
                   <SelectItem value='third_party'>三方</SelectItem>
                 </SelectContent>
@@ -2917,11 +2931,11 @@ export function AccountsManagementClient({
                   setPage(1);
                 }}
               >
-                <SelectTrigger className='min-w-[150px] rounded-xl'>
-                  <SelectValue />
+                <SelectTrigger className='h-10 min-w-[112px] border-0 bg-transparent px-3 shadow-none focus-visible:border-transparent focus-visible:ring-0'>
+                  <span className='truncate'>{confidenceTriggerLabel}</span>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value='all'>全部置信度</SelectItem>
+                  <SelectItem value='all'>全部</SelectItem>
                   <SelectItem value='very_high'>极高</SelectItem>
                   <SelectItem value='high'>高</SelectItem>
                   <SelectItem value='medium'>中</SelectItem>
@@ -2929,7 +2943,7 @@ export function AccountsManagementClient({
                 </SelectContent>
               </Select>
             </div>
-            <div className='flex flex-wrap items-center justify-end gap-2'>
+            <div className='flex shrink-0 items-center justify-end gap-2'>
               <Button
                 type='submit'
                 variant='outline'
