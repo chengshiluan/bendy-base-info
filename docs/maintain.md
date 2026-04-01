@@ -14,6 +14,7 @@
 
 - 每次首次开始项目迭代前，先阅读 `docs/` 目录下的 Markdown 文档。
 - 最少先看：`docs/AGENTS.md`、`docs/PLAN.md`、`docs/maintain.md`，以及本次任务相关专题文档。
+- 如果本次任务涉及后台管理页、表格页、抽屉、弹窗或工具栏布局，必须先阅读 `docs/designUI.md`，并按其中标准实现。
 - 每次较大的开发任务开始前，先把任务拆成子任务，再写入 `docs/PLAN.md`。
 - 每完成一个子任务，就同步更新 `docs/PLAN.md` 的完成状态。
 - 每次开发结束，都要在本文件记录本次做了什么、怎么验证、还有什么待继续。
@@ -35,6 +36,21 @@
 ```
 
 ## 最近开发记录
+
+### 2026-04-01 - 账号管理 UI 设计规范沉淀与抽屉交互统一
+
+- 完成事项：
+  - 将账号管理页顶部搜索区重构为一体化工具栏，统一搜索框、状态、属性、置信度和右侧 `搜索 / 新增` 按钮的高度与对齐关系
+  - 将平台、注册源、密钥、密保、补充信息相关抽屉统一改为“先展示表格，再通过弹窗编辑”的交互模式，并补齐全选、单选、批量删除、空态表格、行内绑定/编辑等行为
+  - 为宽表格抽屉增加可伸缩宽度交互，避免字段较多时布局挤压变形
+  - 新增 `docs/designUI.md`，把这轮沉淀出的管理页 UI 标准整理成统一文档，供后续开发复用
+  - 在 `docs/maintain.md` 中补充强制协作规则：凡是涉及后台管理页、表格、抽屉、弹窗或工具栏布局，开发前必须先阅读 `docs/designUI.md`
+- 验证：
+  - 在 Node `24.x` 环境执行 `npx -y node@24 ./node_modules/.bin/eslint src/features/management/components/accounts-management-client.tsx`，通过
+  - 在 Node `24.x` 环境执行 `npx -y node@24 ./node_modules/.bin/tsc -p tsconfig.json --noEmit`，通过
+  - 执行 `npx prettier --write docs/designUI.md docs/maintain.md src/features/management/components/accounts-management-client.tsx`，完成
+- 后续待办：
+  - 后续新增或重构后台管理页时，统一按 `docs/designUI.md` 实现，避免再次出现“进入即编辑”“工具栏断层”“按钮不齐”的问题
 
 ### 2026-03-28 - 管理工作区权限可绑定修复与版本升级 0.1.9
 
