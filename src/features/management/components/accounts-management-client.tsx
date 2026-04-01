@@ -124,6 +124,11 @@ type SecurityFormState = {
   content: string;
 };
 
+type WealthFormState = {
+  key: string;
+  value: string;
+};
+
 type ActiveSheet =
   | { type: 'closed' }
   | { type: 'account-editor'; accountId?: number }
@@ -135,7 +140,14 @@ type ActiveSheet =
   | { type: 'wealth'; accountId: number };
 
 type DeleteTarget = null | {
-  type: 'account' | 'platform' | 'source' | 'key' | 'binding' | 'security';
+  type:
+    | 'account'
+    | 'platform'
+    | 'source'
+    | 'key'
+    | 'binding'
+    | 'security'
+    | 'wealth';
   ids: number[];
   label: string;
 };
@@ -192,8 +204,15 @@ function createDefaultSecurityForm(): SecurityFormState {
   };
 }
 
+function createDefaultWealthForm(): WealthFormState {
+  return {
+    key: '',
+    value: ''
+  };
+}
+
 function createEmptyWealthEntries(): ManagedWealthEntry[] {
-  return [{ key: '', value: '' }];
+  return [];
 }
 
 function formatDateTimeLabel(value?: string | null) {
@@ -315,6 +334,7 @@ export function AccountsManagementClient({
   const [editingSourceId, setEditingSourceId] = useState<number | null>(null);
   const [keyForm, setKeyForm] = useState<KeyFormState>(createDefaultKeyForm());
   const [editingKeyId, setEditingKeyId] = useState<number | null>(null);
+  const [keyDialogOpen, setKeyDialogOpen] = useState(false);
   const [bindingForm, setBindingForm] = useState<BindingFormState>(
     createDefaultBindingForm()
   );
@@ -328,14 +348,33 @@ export function AccountsManagementClient({
   const [editingSecurityId, setEditingSecurityId] = useState<number | null>(
     null
   );
+  const [securityDialogOpen, setSecurityDialogOpen] = useState(false);
+  const [wealthForm, setWealthForm] = useState<WealthFormState>(
+    createDefaultWealthForm()
+  );
+  const [editingWealthIndex, setEditingWealthIndex] = useState<number | null>(
+    null
+  );
+  const [wealthDialogOpen, setWealthDialogOpen] = useState(false);
   const [selectedSourceIds, setSelectedSourceIds] = useState<number[]>([]);
   const [selectedPlatformIds, setSelectedPlatformIds] = useState<number[]>([]);
   const [selectedCatalogSourceIds, setSelectedCatalogSourceIds] = useState<
     number[]
   >([]);
+  const [selectedKeyIds, setSelectedKeyIds] = useState<number[]>([]);
+  const [selectedSecurityIds, setSelectedSecurityIds] = useState<number[]>([]);
+  const [selectedWealthIndices, setSelectedWealthIndices] = useState<number[]>(
+    []
+  );
   const [wealthDrafts, setWealthDrafts] = useState<ManagedWealthEntry[]>(
     createEmptyWealthEntries()
   );
+  const [keySearchDraft, setKeySearchDraft] = useState('');
+  const [keySearchKeyword, setKeySearchKeyword] = useState('');
+  const [securitySearchDraft, setSecuritySearchDraft] = useState('');
+  const [securitySearchKeyword, setSecuritySearchKeyword] = useState('');
+  const [wealthSearchDraft, setWealthSearchDraft] = useState('');
+  const [wealthSearchKeyword, setWealthSearchKeyword] = useState('');
   const [platformSearchDraft, setPlatformSearchDraft] = useState('');
   const [platformSearchKeyword, setPlatformSearchKeyword] = useState('');
   const [sourceSearchDraft, setSourceSearchDraft] = useState('');
@@ -352,7 +391,11 @@ export function AccountsManagementClient({
   const canManageNested = access.canCreate || access.canUpdate;
   const sheetOpen = activeSheet.type !== 'closed';
   const wideSheetActive =
-    activeSheet.type === 'platforms' || activeSheet.type === 'sources';
+    activeSheet.type === 'platforms' ||
+    activeSheet.type === 'sources' ||
+    activeSheet.type === 'keys' ||
+    activeSheet.type === 'securities' ||
+    activeSheet.type === 'wealth';
   const toolbarButtonClassName =
     'h-10 rounded-xl px-4 focus-visible:bg-white focus-visible:text-black active:bg-white active:text-black';
 
@@ -386,6 +429,53 @@ export function AccountsManagementClient({
       ].some((value) => value.toLowerCase().includes(keyword))
     );
   }, [registrationSources, sourceSearchKeyword]);
+
+  const filteredKeys = useMemo(() => {
+    const keyword = keySearchKeyword.trim().toLowerCase();
+    const keys = selectedAccountDetail?.keys ?? [];
+
+    if (!keyword) {
+      return keys;
+    }
+
+    return keys.filter((key) =>
+      [key.title, key.content, key.expiresAt ?? ''].some((value) =>
+        value.toLowerCase().includes(keyword)
+      )
+    );
+  }, [keySearchKeyword, selectedAccountDetail]);
+
+  const filteredSecurities = useMemo(() => {
+    const keyword = securitySearchKeyword.trim().toLowerCase();
+    const securities = selectedAccountDetail?.securities ?? [];
+
+    if (!keyword) {
+      return securities;
+    }
+
+    return securities.filter((security) =>
+      [
+        getSecurityTypeLabel(security.securityType),
+        security.content,
+        security.updatedAt
+      ].some((value) => value.toLowerCase().includes(keyword))
+    );
+  }, [securitySearchKeyword, selectedAccountDetail]);
+
+  const filteredWealthEntries = useMemo(() => {
+    const keyword = wealthSearchKeyword.trim().toLowerCase();
+    const entries = wealthDrafts.map((entry, index) => ({ entry, index }));
+
+    if (!keyword) {
+      return entries;
+    }
+
+    return entries.filter(({ entry }) =>
+      [entry.key, entry.value].some((value) =>
+        value.toLowerCase().includes(keyword)
+      )
+    );
+  }, [wealthDrafts, wealthSearchKeyword]);
 
   async function refreshAccounts() {
     if (!workspaceId) {
@@ -457,15 +547,29 @@ export function AccountsManagementClient({
     setSourceDialogOpen(false);
     setKeyForm(createDefaultKeyForm());
     setEditingKeyId(null);
+    setKeyDialogOpen(false);
     setBindingForm(createDefaultBindingForm());
     setBindingDrafts([createDefaultBindingForm()]);
     setEditingBindingId(null);
     setSecurityForm(createDefaultSecurityForm());
     setEditingSecurityId(null);
+    setSecurityDialogOpen(false);
+    setWealthForm(createDefaultWealthForm());
+    setEditingWealthIndex(null);
+    setWealthDialogOpen(false);
     setSelectedSourceIds([]);
     setSelectedPlatformIds([]);
     setSelectedCatalogSourceIds([]);
+    setSelectedKeyIds([]);
+    setSelectedSecurityIds([]);
+    setSelectedWealthIndices([]);
     setWealthDrafts(createEmptyWealthEntries());
+    setKeySearchDraft('');
+    setKeySearchKeyword('');
+    setSecuritySearchDraft('');
+    setSecuritySearchKeyword('');
+    setWealthSearchDraft('');
+    setWealthSearchKeyword('');
     setPlatformSearchDraft('');
     setPlatformSearchKeyword('');
     setSourceSearchDraft('');
@@ -646,6 +750,52 @@ export function AccountsManagementClient({
     }
 
     setSourceDialogOpen(true);
+  }
+
+  function openKeyDialog(key?: ManagedAccountKeySummary) {
+    if (key) {
+      setEditingKeyId(key.id);
+      setKeyForm({
+        title: key.title,
+        content: key.content,
+        expiresAt: toDateTimeLocalValue(key.expiresAt)
+      });
+    } else {
+      setEditingKeyId(null);
+      setKeyForm(createDefaultKeyForm());
+    }
+
+    setKeyDialogOpen(true);
+  }
+
+  function openSecurityDialog(security?: ManagedAccountSecuritySummary) {
+    if (security) {
+      setEditingSecurityId(security.id);
+      setSecurityForm({
+        securityType: security.securityType,
+        content: security.content
+      });
+    } else {
+      setEditingSecurityId(null);
+      setSecurityForm(createDefaultSecurityForm());
+    }
+
+    setSecurityDialogOpen(true);
+  }
+
+  function openWealthDialog(index?: number) {
+    if (typeof index === 'number' && wealthDrafts[index]) {
+      setEditingWealthIndex(index);
+      setWealthForm({
+        key: wealthDrafts[index].key,
+        value: wealthDrafts[index].value
+      });
+    } else {
+      setEditingWealthIndex(null);
+      setWealthForm(createDefaultWealthForm());
+    }
+
+    setWealthDialogOpen(true);
   }
 
   async function openAccountSheet(
@@ -888,6 +1038,7 @@ export function AccountsManagementClient({
       setSelectedAccountDetail(data.account);
       setKeyForm(createDefaultKeyForm());
       setEditingKeyId(null);
+      setKeyDialogOpen(false);
       toast.success(editingKeyId ? '密钥已更新。' : '密钥已新增。');
       await refreshAccounts();
     } catch (error) {
@@ -986,6 +1137,7 @@ export function AccountsManagementClient({
       setSelectedAccountDetail(data.account);
       setSecurityForm(createDefaultSecurityForm());
       setEditingSecurityId(null);
+      setSecurityDialogOpen(false);
       toast.success(editingSecurityId ? '密保已更新。' : '密保已新增。');
       await refreshAccounts();
     } catch (error) {
@@ -1087,14 +1239,20 @@ export function AccountsManagementClient({
     }
   }
 
-  async function handleWealthSave() {
+  async function saveWealthEntries(
+    entries: ManagedWealthEntry[],
+    successMessage: string
+  ) {
     if (!workspaceId || !selectedAccountDetail) {
-      return;
+      return false;
     }
 
     setSubmitPending(true);
 
     try {
+      const sanitizedEntries = entries.filter(
+        (entry) => entry.key.trim() && entry.value.trim()
+      );
       const data = await requestJson<{ account: ManagedAccountDetail }>(
         `/api/admin/accounts/${selectedAccountDetail.id}`,
         {
@@ -1109,36 +1267,57 @@ export function AccountsManagementClient({
             registeredAt:
               toDateTimeLocalValue(selectedAccountDetail.registeredAt) || null,
             status: selectedAccountDetail.status,
-            wealthEntries: wealthDrafts.filter(
-              (entry) => entry.key.trim() && entry.value.trim()
-            ),
+            wealthEntries: sanitizedEntries,
             sourceIds: selectedAccountDetail.registrationSourceIds
           })
         }
       );
 
       setSelectedAccountDetail(data.account);
-      setWealthDrafts(
-        data.account.wealthEntries.length
-          ? data.account.wealthEntries
-          : createEmptyWealthEntries()
-      );
-      toast.success('财富信息已保存。');
+      setWealthDrafts(data.account.wealthEntries);
+      toast.success(successMessage);
       await refreshAccounts();
+      return true;
     } catch (error) {
       toast.error(getErrorMessage(error));
+      return false;
     } finally {
       setSubmitPending(false);
     }
   }
 
-  function beginEditKey(key: ManagedAccountKeySummary) {
-    setEditingKeyId(key.id);
-    setKeyForm({
-      title: key.title,
-      content: key.content,
-      expiresAt: toDateTimeLocalValue(key.expiresAt)
-    });
+  async function handleWealthEntrySubmit(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    if (!wealthForm.key.trim() || !wealthForm.value.trim()) {
+      toast.error('请先填写完整的标题和内容。');
+      return;
+    }
+
+    const nextEntry = {
+      key: wealthForm.key,
+      value: wealthForm.value
+    };
+    const nextEntries =
+      editingWealthIndex === null
+        ? [...wealthDrafts, nextEntry]
+        : wealthDrafts.map((entry, index) =>
+            index === editingWealthIndex ? nextEntry : entry
+          );
+
+    const success = await saveWealthEntries(
+      nextEntries,
+      editingWealthIndex === null ? '补充信息已新增。' : '补充信息已更新。'
+    );
+
+    if (success) {
+      setWealthDialogOpen(false);
+      setEditingWealthIndex(null);
+      setWealthForm(createDefaultWealthForm());
+      setSelectedWealthIndices([]);
+    }
   }
 
   function beginEditBinding(binding: ManagedAccountBindingSummary) {
@@ -1146,14 +1325,6 @@ export function AccountsManagementClient({
     setBindingForm({
       platformId: binding.platformId ? String(binding.platformId) : '',
       platformAccount: binding.platformAccount
-    });
-  }
-
-  function beginEditSecurity(security: ManagedAccountSecuritySummary) {
-    setEditingSecurityId(security.id);
-    setSecurityForm({
-      securityType: security.securityType,
-      content: security.content
     });
   }
 
@@ -1234,12 +1405,27 @@ export function AccountsManagementClient({
           setSelectedCatalogSourceIds([]);
           break;
         case 'key': {
-          const data = await requestJson<{ account: ManagedAccountDetail }>(
-            `/api/admin/accounts/keys/${deleteTarget.ids[0]}?workspaceId=${workspaceId}`,
-            { method: 'DELETE' }
+          await Promise.all(
+            deleteTarget.ids.map((id) =>
+              requestJson(
+                `/api/admin/accounts/keys/${id}?workspaceId=${workspaceId}`,
+                {
+                  method: 'DELETE'
+                }
+              )
+            )
           );
-          setSelectedAccountDetail(data.account);
-          toast.success('密钥已删除。');
+          if (activeSheet.type === 'keys' && activeSheet.accountId) {
+            const detail = await loadAccountDetail(activeSheet.accountId);
+            setSelectedAccountDetail(detail);
+          }
+          setSelectedKeyIds([]);
+          setKeyDialogOpen(false);
+          setEditingKeyId(null);
+          setKeyForm(createDefaultKeyForm());
+          toast.success(
+            deleteTarget.ids.length > 1 ? '密钥已批量删除。' : '密钥已删除。'
+          );
           break;
         }
         case 'binding': {
@@ -1252,12 +1438,46 @@ export function AccountsManagementClient({
           break;
         }
         case 'security': {
-          const data = await requestJson<{ account: ManagedAccountDetail }>(
-            `/api/admin/accounts/securities/${deleteTarget.ids[0]}?workspaceId=${workspaceId}`,
-            { method: 'DELETE' }
+          await Promise.all(
+            deleteTarget.ids.map((id) =>
+              requestJson(
+                `/api/admin/accounts/securities/${id}?workspaceId=${workspaceId}`,
+                { method: 'DELETE' }
+              )
+            )
           );
-          setSelectedAccountDetail(data.account);
-          toast.success('密保已删除。');
+          if (activeSheet.type === 'securities' && activeSheet.accountId) {
+            const detail = await loadAccountDetail(activeSheet.accountId);
+            setSelectedAccountDetail(detail);
+          }
+          setSelectedSecurityIds([]);
+          setSecurityDialogOpen(false);
+          setEditingSecurityId(null);
+          setSecurityForm(createDefaultSecurityForm());
+          toast.success(
+            deleteTarget.ids.length > 1 ? '密保已批量删除。' : '密保已删除。'
+          );
+          break;
+        }
+        case 'wealth': {
+          const nextEntries = wealthDrafts.filter(
+            (_, index) => !deleteTarget.ids.includes(index)
+          );
+          const success = await saveWealthEntries(
+            nextEntries,
+            deleteTarget.ids.length > 1
+              ? '补充信息已批量删除。'
+              : '补充信息已删除。'
+          );
+
+          if (!success) {
+            return;
+          }
+
+          setSelectedWealthIndices([]);
+          setWealthDialogOpen(false);
+          setEditingWealthIndex(null);
+          setWealthForm(createDefaultWealthForm());
           break;
         }
       }
@@ -1670,150 +1890,179 @@ export function AccountsManagementClient({
         );
       }
 
-      case 'keys':
+      case 'keys': {
+        const allKeysSelected =
+          filteredKeys.length > 0 &&
+          filteredKeys.every((key) => selectedKeyIds.includes(key.id));
+
         return (
           <>
-            <SheetHeader>
-              <SheetTitle>密钥信息</SheetTitle>
-              <SheetDescription>
-                已存在的密钥可复制内容，支持新增、编辑和删除。
-              </SheetDescription>
+            <SheetHeader className='border-border/60 border-b pb-4'>
+              <SheetTitle>密钥</SheetTitle>
             </SheetHeader>
-            <div className='mt-6 grid gap-6'>
-              <div className='space-y-3'>
-                {selectedAccountDetail?.keys.map((key) => (
-                  <div key={key.id} className='rounded-lg border p-4'>
-                    <div className='flex items-start justify-between gap-3'>
-                      <div className='space-y-1'>
-                        <div className='font-medium'>{key.title}</div>
-                        <div className='text-muted-foreground text-sm'>
-                          过期时间：{formatDateTimeLabel(key.expiresAt)}
-                        </div>
-                      </div>
-                      <div className='flex gap-2'>
-                        <Button
-                          type='button'
-                          variant='outline'
-                          size='sm'
-                          onClick={() =>
-                            void handleCopy(key.content, '密钥内容')
-                          }
-                        >
-                          <Copy className='mr-1 size-4' />
-                          复制
-                        </Button>
-                        {access.canUpdate ? (
-                          <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            onClick={() => beginEditKey(key)}
-                          >
-                            编辑
-                          </Button>
-                        ) : null}
-                        {access.canDelete ? (
-                          <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            onClick={() =>
-                              setDeleteTarget({
-                                type: 'key',
-                                ids: [key.id],
-                                label: key.title
-                              })
-                            }
-                          >
-                            删除
-                          </Button>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className='bg-muted mt-3 rounded-md p-3 text-sm break-all'>
-                      {key.content}
-                    </div>
-                  </div>
-                ))}
-                {!selectedAccountDetail?.keys.length ? (
-                  <div className='text-muted-foreground rounded-lg border border-dashed px-4 py-10 text-center text-sm'>
-                    当前还没有密钥信息。
-                  </div>
-                ) : null}
-              </div>
-
-              {canManageNested ? (
-                <form
-                  className='space-y-4 rounded-lg border p-4'
-                  onSubmit={handleKeySubmit}
-                >
-                  <div className='font-medium'>
-                    {editingKeyId ? '编辑密钥' : '新增密钥'}
-                  </div>
-                  <div className='grid gap-2'>
-                    <div className='text-sm font-medium'>密钥标题</div>
-                    <Input
-                      value={keyForm.title}
-                      onChange={(event) =>
-                        setKeyForm((current) => ({
-                          ...current,
-                          title: event.target.value
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className='grid gap-2'>
-                    <div className='text-sm font-medium'>密钥内容</div>
-                    <Textarea
-                      value={keyForm.content}
-                      onChange={(event) =>
-                        setKeyForm((current) => ({
-                          ...current,
-                          content: event.target.value
-                        }))
-                      }
-                      rows={5}
-                    />
-                  </div>
-                  <div className='grid gap-2'>
-                    <div className='text-sm font-medium'>过期时间</div>
-                    <Input
-                      type='datetime-local'
-                      value={keyForm.expiresAt}
-                      onChange={(event) =>
-                        setKeyForm((current) => ({
-                          ...current,
-                          expiresAt: event.target.value
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className='flex items-center justify-end gap-2'>
-                    {editingKeyId ? (
-                      <Button
-                        type='button'
-                        variant='outline'
-                        onClick={() => {
-                          setKeyForm(createDefaultKeyForm());
-                          setEditingKeyId(null);
-                        }}
-                      >
-                        取消编辑
-                      </Button>
-                    ) : null}
-                    <Button type='submit' disabled={submitPending}>
-                      {submitPending
-                        ? '提交中...'
-                        : editingKeyId
-                          ? '保存修改'
-                          : '新增密钥'}
+            <div className='flex h-full min-h-0 flex-col px-4 pb-4'>
+              <form
+                className='border-border/60 flex flex-col gap-2 border-b py-4 lg:flex-row lg:items-center'
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setKeySearchKeyword(keySearchDraft.trim());
+                }}
+              >
+                <Input
+                  value={keySearchDraft}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setKeySearchDraft(value);
+                    if (!value.trim()) {
+                      setKeySearchKeyword('');
+                    }
+                  }}
+                  placeholder='搜索密钥标题 / 内容 / 过期时间'
+                  className='h-10 flex-1 rounded-xl px-4'
+                />
+                <div className='flex flex-wrap items-center justify-end gap-2'>
+                  <Button
+                    type='submit'
+                    variant='outline'
+                    className={toolbarButtonClassName}
+                    onMouseUp={(event) => event.currentTarget.blur()}
+                  >
+                    搜索
+                  </Button>
+                  {access.canCreate ? (
+                    <Button
+                      type='button'
+                      variant='outline'
+                      className={toolbarButtonClassName}
+                      onClick={() => openKeyDialog()}
+                      onMouseUp={(event) => event.currentTarget.blur()}
+                    >
+                      新增
                     </Button>
-                  </div>
-                </form>
-              ) : null}
+                  ) : null}
+                  {access.canDelete ? (
+                    <Button
+                      type='button'
+                      variant='outline'
+                      className={toolbarButtonClassName}
+                      disabled={!selectedKeyIds.length}
+                      onClick={() =>
+                        setDeleteTarget({
+                          type: 'key',
+                          ids: selectedKeyIds,
+                          label:
+                            selectedKeyIds.length > 1
+                              ? `已选 ${selectedKeyIds.length} 条密钥`
+                              : filteredKeys.find(
+                                  (key) => key.id === selectedKeyIds[0]
+                                )?.title || '当前密钥'
+                        })
+                      }
+                      onMouseUp={(event) => event.currentTarget.blur()}
+                    >
+                      删除
+                    </Button>
+                  ) : null}
+                </div>
+              </form>
+
+              <div className='min-h-0 flex-1 overflow-auto py-4'>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className='w-12'>
+                        <Checkbox
+                          checked={
+                            allKeysSelected
+                              ? true
+                              : selectedKeyIds.length
+                                ? 'indeterminate'
+                                : false
+                          }
+                          onCheckedChange={(checked) =>
+                            setSelectedKeyIds(
+                              checked ? filteredKeys.map((key) => key.id) : []
+                            )
+                          }
+                          aria-label='全选密钥'
+                        />
+                      </TableHead>
+                      <TableHead>标题</TableHead>
+                      <TableHead>内容</TableHead>
+                      <TableHead>过期时间</TableHead>
+                      <TableHead>更新时间</TableHead>
+                      <TableHead className='w-[240px]'>操作</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredKeys.map((key) => (
+                      <TableRow key={key.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedKeyIds.includes(key.id)}
+                            onCheckedChange={(checked) =>
+                              setSelectedKeyIds((current) =>
+                                toggleSelectedIds(current, key.id, checked)
+                              )
+                            }
+                            aria-label={`选择密钥 ${key.title}`}
+                          />
+                        </TableCell>
+                        <TableCell className='font-medium'>
+                          {key.title}
+                        </TableCell>
+                        <TableCell className='max-w-md'>
+                          <div className='truncate text-sm'>{key.content}</div>
+                        </TableCell>
+                        <TableCell>
+                          {formatDateTimeLabel(key.expiresAt)}
+                        </TableCell>
+                        <TableCell>
+                          {formatDateTimeLabel(key.updatedAt)}
+                        </TableCell>
+                        <TableCell>
+                          <div className='flex flex-wrap justify-end gap-2'>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              size='sm'
+                              onClick={() =>
+                                void handleCopy(key.content, '密钥内容')
+                              }
+                            >
+                              复制
+                            </Button>
+                            {access.canUpdate ? (
+                              <Button
+                                type='button'
+                                variant='outline'
+                                size='sm'
+                                onClick={() => openKeyDialog(key)}
+                              >
+                                编辑
+                              </Button>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {!filteredKeys.length ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={6}
+                          className='text-muted-foreground py-12 text-center'
+                        >
+                          暂无数据
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           </>
         );
+      }
 
       case 'bindings':
         return (
@@ -2246,247 +2495,344 @@ export function AccountsManagementClient({
         );
       }
 
-      case 'securities':
+      case 'securities': {
+        const allSecuritiesSelected =
+          filteredSecurities.length > 0 &&
+          filteredSecurities.every((security) =>
+            selectedSecurityIds.includes(security.id)
+          );
+
         return (
           <>
-            <SheetHeader>
-              <SheetTitle>密保信息</SheetTitle>
-              <SheetDescription>
-                支持问题验证、2FA验证、联系人和紧急邮箱，多条密保信息可并存。
-              </SheetDescription>
+            <SheetHeader className='border-border/60 border-b pb-4'>
+              <SheetTitle>密保</SheetTitle>
             </SheetHeader>
-            <div className='mt-6 grid gap-6'>
-              <div className='space-y-3'>
-                {selectedAccountDetail?.securities.map((security) => (
-                  <div key={security.id} className='rounded-lg border p-4'>
-                    <div className='flex items-start justify-between gap-3'>
-                      <div>
-                        <div className='font-medium'>
-                          {getSecurityTypeLabel(security.securityType)}
-                        </div>
-                        <div className='text-muted-foreground text-sm'>
-                          更新时间：{formatDateTimeLabel(security.updatedAt)}
-                        </div>
-                      </div>
-                      <div className='flex gap-2'>
-                        {access.canUpdate ? (
-                          <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            onClick={() => beginEditSecurity(security)}
-                          >
-                            编辑
-                          </Button>
-                        ) : null}
-                        {access.canDelete ? (
-                          <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            onClick={() =>
-                              setDeleteTarget({
-                                type: 'security',
-                                ids: [security.id],
-                                label: getSecurityTypeLabel(
-                                  security.securityType
-                                )
-                              })
-                            }
-                          >
-                            删除
-                          </Button>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className='bg-muted mt-3 rounded-md p-3 text-sm whitespace-pre-wrap'>
-                      {security.content}
-                    </div>
-                  </div>
-                ))}
-                {!selectedAccountDetail?.securities.length ? (
-                  <div className='text-muted-foreground rounded-lg border border-dashed px-4 py-10 text-center text-sm'>
-                    当前还没有密保信息。
-                  </div>
-                ) : null}
-              </div>
-
-              {canManageNested ? (
-                <form
-                  className='space-y-4 rounded-lg border p-4'
-                  onSubmit={handleSecuritySubmit}
-                >
-                  <div className='font-medium'>
-                    {editingSecurityId ? '编辑密保' : '新增密保'}
-                  </div>
-                  <Select
-                    value={securityForm.securityType}
-                    onValueChange={(
-                      value: ManagedAccountSecuritySummary['securityType']
-                    ) =>
-                      setSecurityForm((current) => ({
-                        ...current,
-                        securityType: value
-                      }))
+            <div className='flex h-full min-h-0 flex-col px-4 pb-4'>
+              <form
+                className='border-border/60 flex flex-col gap-2 border-b py-4 lg:flex-row lg:items-center'
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setSecuritySearchKeyword(securitySearchDraft.trim());
+                }}
+              >
+                <Input
+                  value={securitySearchDraft}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setSecuritySearchDraft(value);
+                    if (!value.trim()) {
+                      setSecuritySearchKeyword('');
                     }
+                  }}
+                  placeholder='搜索密保类型 / 内容 / 更新时间'
+                  className='h-10 flex-1 rounded-xl px-4'
+                />
+                <div className='flex flex-wrap items-center justify-end gap-2'>
+                  <Button
+                    type='submit'
+                    variant='outline'
+                    className={toolbarButtonClassName}
+                    onMouseUp={(event) => event.currentTarget.blur()}
                   >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value='question'>问题验证</SelectItem>
-                      <SelectItem value='two_factor'>2FA验证</SelectItem>
-                      <SelectItem value='contact'>联系人</SelectItem>
-                      <SelectItem value='emergency_email'>紧急邮箱</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Textarea
-                    value={securityForm.content}
-                    onChange={(event) =>
-                      setSecurityForm((current) => ({
-                        ...current,
-                        content: event.target.value
-                      }))
-                    }
-                    rows={6}
-                    placeholder='请输入明文密保内容'
-                  />
-                  <div className='flex items-center justify-end gap-2'>
-                    {editingSecurityId ? (
-                      <Button
-                        type='button'
-                        variant='outline'
-                        onClick={() => {
-                          setSecurityForm(createDefaultSecurityForm());
-                          setEditingSecurityId(null);
-                        }}
-                      >
-                        取消编辑
-                      </Button>
-                    ) : null}
-                    <Button type='submit' disabled={submitPending}>
-                      {submitPending
-                        ? '提交中...'
-                        : editingSecurityId
-                          ? '保存修改'
-                          : '新增密保'}
-                    </Button>
-                  </div>
-                </form>
-              ) : null}
-            </div>
-          </>
-        );
-
-      case 'wealth':
-        return (
-          <>
-            <SheetHeader>
-              <SheetTitle>财富详情</SheetTitle>
-              <SheetDescription>
-                展示时采用“标题：内容”格式，编辑时改为可维护的键值对。
-              </SheetDescription>
-            </SheetHeader>
-            <div className='mt-6 grid gap-6'>
-              <div className='rounded-lg border p-4'>
-                <div className='mb-3 font-medium'>当前展示</div>
-                <div className='space-y-2 text-sm'>
-                  {selectedAccountDetail?.wealthEntries.length ? (
-                    selectedAccountDetail.wealthEntries.map((entry) => (
-                      <div key={entry.key}>
-                        <span className='font-medium'>{entry.key}：</span>
-                        <span className='text-muted-foreground'>
-                          {entry.value}
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className='text-muted-foreground'>
-                      当前还没有财富信息。
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {canManageNested ? (
-                <div className='space-y-4 rounded-lg border p-4'>
-                  <div className='font-medium'>编辑财富信息</div>
-                  {wealthDrafts.map((entry, index) => (
-                    <div
-                      key={index}
-                      className='grid gap-3 rounded-md border p-3 md:grid-cols-2'
-                    >
-                      <Input
-                        value={entry.key}
-                        onChange={(event) =>
-                          setWealthDrafts((current) =>
-                            current.map((item, itemIndex) =>
-                              itemIndex === index
-                                ? { ...item, key: event.target.value }
-                                : item
-                            )
-                          )
-                        }
-                        placeholder='标题'
-                      />
-                      <div className='flex gap-2'>
-                        <Input
-                          value={entry.value}
-                          onChange={(event) =>
-                            setWealthDrafts((current) =>
-                              current.map((item, itemIndex) =>
-                                itemIndex === index
-                                  ? { ...item, value: event.target.value }
-                                  : item
-                              )
-                            )
-                          }
-                          placeholder='内容'
-                        />
-                        {wealthDrafts.length > 1 ? (
-                          <Button
-                            type='button'
-                            variant='outline'
-                            onClick={() =>
-                              setWealthDrafts((current) =>
-                                current.filter(
-                                  (_, itemIndex) => itemIndex !== index
-                                )
-                              )
-                            }
-                          >
-                            删除
-                          </Button>
-                        ) : null}
-                      </div>
-                    </div>
-                  ))}
-                  <div className='flex items-center justify-between'>
+                    搜索
+                  </Button>
+                  {access.canCreate ? (
                     <Button
                       type='button'
                       variant='outline'
-                      onClick={() =>
-                        setWealthDrafts((current) => [
-                          ...current,
-                          { key: '', value: '' }
-                        ])
-                      }
+                      className={toolbarButtonClassName}
+                      onClick={() => openSecurityDialog()}
+                      onMouseUp={(event) => event.currentTarget.blur()}
                     >
-                      <Plus className='mr-1 size-4' />
-                      新增一项
+                      新增
                     </Button>
+                  ) : null}
+                  {access.canDelete ? (
                     <Button
-                      disabled={submitPending}
-                      onClick={() => void handleWealthSave()}
+                      type='button'
+                      variant='outline'
+                      className={toolbarButtonClassName}
+                      disabled={!selectedSecurityIds.length}
+                      onClick={() =>
+                        setDeleteTarget({
+                          type: 'security',
+                          ids: selectedSecurityIds,
+                          label:
+                            selectedSecurityIds.length > 1
+                              ? `已选 ${selectedSecurityIds.length} 条密保`
+                              : filteredSecurities.find(
+                                    (security) =>
+                                      security.id === selectedSecurityIds[0]
+                                  )
+                                ? getSecurityTypeLabel(
+                                    filteredSecurities.find(
+                                      (security) =>
+                                        security.id === selectedSecurityIds[0]
+                                    )!.securityType
+                                  )
+                                : '当前密保'
+                        })
+                      }
+                      onMouseUp={(event) => event.currentTarget.blur()}
                     >
-                      {submitPending ? '保存中...' : '保存财富信息'}
+                      删除
                     </Button>
-                  </div>
+                  ) : null}
                 </div>
-              ) : null}
+              </form>
+
+              <div className='min-h-0 flex-1 overflow-auto py-4'>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className='w-12'>
+                        <Checkbox
+                          checked={
+                            allSecuritiesSelected
+                              ? true
+                              : selectedSecurityIds.length
+                                ? 'indeterminate'
+                                : false
+                          }
+                          onCheckedChange={(checked) =>
+                            setSelectedSecurityIds(
+                              checked
+                                ? filteredSecurities.map(
+                                    (security) => security.id
+                                  )
+                                : []
+                            )
+                          }
+                          aria-label='全选密保'
+                        />
+                      </TableHead>
+                      <TableHead>类型</TableHead>
+                      <TableHead>内容</TableHead>
+                      <TableHead>更新时间</TableHead>
+                      <TableHead className='w-[180px]'>操作</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredSecurities.map((security) => (
+                      <TableRow key={security.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedSecurityIds.includes(security.id)}
+                            onCheckedChange={(checked) =>
+                              setSelectedSecurityIds((current) =>
+                                toggleSelectedIds(current, security.id, checked)
+                              )
+                            }
+                            aria-label={`选择密保 ${getSecurityTypeLabel(security.securityType)}`}
+                          />
+                        </TableCell>
+                        <TableCell className='font-medium'>
+                          {getSecurityTypeLabel(security.securityType)}
+                        </TableCell>
+                        <TableCell className='max-w-xl'>
+                          <div className='truncate text-sm'>
+                            {security.content}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {formatDateTimeLabel(security.updatedAt)}
+                        </TableCell>
+                        <TableCell>
+                          <div className='flex flex-wrap justify-end gap-2'>
+                            {access.canUpdate ? (
+                              <Button
+                                type='button'
+                                variant='outline'
+                                size='sm'
+                                onClick={() => openSecurityDialog(security)}
+                              >
+                                编辑
+                              </Button>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {!filteredSecurities.length ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className='text-muted-foreground py-12 text-center'
+                        >
+                          暂无数据
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           </>
         );
+      }
+
+      case 'wealth': {
+        const allWealthSelected =
+          filteredWealthEntries.length > 0 &&
+          filteredWealthEntries.every(({ index }) =>
+            selectedWealthIndices.includes(index)
+          );
+
+        return (
+          <>
+            <SheetHeader className='border-border/60 border-b pb-4'>
+              <SheetTitle>补充信息</SheetTitle>
+            </SheetHeader>
+            <div className='flex h-full min-h-0 flex-col px-4 pb-4'>
+              <form
+                className='border-border/60 flex flex-col gap-2 border-b py-4 lg:flex-row lg:items-center'
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setWealthSearchKeyword(wealthSearchDraft.trim());
+                }}
+              >
+                <Input
+                  value={wealthSearchDraft}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setWealthSearchDraft(value);
+                    if (!value.trim()) {
+                      setWealthSearchKeyword('');
+                    }
+                  }}
+                  placeholder='搜索标题 / 内容'
+                  className='h-10 flex-1 rounded-xl px-4'
+                />
+                <div className='flex flex-wrap items-center justify-end gap-2'>
+                  <Button
+                    type='submit'
+                    variant='outline'
+                    className={toolbarButtonClassName}
+                    onMouseUp={(event) => event.currentTarget.blur()}
+                  >
+                    搜索
+                  </Button>
+                  {access.canCreate ? (
+                    <Button
+                      type='button'
+                      variant='outline'
+                      className={toolbarButtonClassName}
+                      onClick={() => openWealthDialog()}
+                      onMouseUp={(event) => event.currentTarget.blur()}
+                    >
+                      新增
+                    </Button>
+                  ) : null}
+                  {access.canDelete ? (
+                    <Button
+                      type='button'
+                      variant='outline'
+                      className={toolbarButtonClassName}
+                      disabled={!selectedWealthIndices.length}
+                      onClick={() =>
+                        setDeleteTarget({
+                          type: 'wealth',
+                          ids: selectedWealthIndices,
+                          label:
+                            selectedWealthIndices.length > 1
+                              ? `已选 ${selectedWealthIndices.length} 条补充信息`
+                              : wealthDrafts[selectedWealthIndices[0]]?.key ||
+                                '当前补充信息'
+                        })
+                      }
+                      onMouseUp={(event) => event.currentTarget.blur()}
+                    >
+                      删除
+                    </Button>
+                  ) : null}
+                </div>
+              </form>
+
+              <div className='min-h-0 flex-1 overflow-auto py-4'>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className='w-12'>
+                        <Checkbox
+                          checked={
+                            allWealthSelected
+                              ? true
+                              : selectedWealthIndices.length
+                                ? 'indeterminate'
+                                : false
+                          }
+                          onCheckedChange={(checked) =>
+                            setSelectedWealthIndices(
+                              checked
+                                ? filteredWealthEntries.map(
+                                    ({ index }) => index
+                                  )
+                                : []
+                            )
+                          }
+                          aria-label='全选补充信息'
+                        />
+                      </TableHead>
+                      <TableHead>标题</TableHead>
+                      <TableHead>内容</TableHead>
+                      <TableHead className='w-[180px]'>操作</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredWealthEntries.map(({ entry, index }) => (
+                      <TableRow key={`${entry.key}-${index}`}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedWealthIndices.includes(index)}
+                            onCheckedChange={(checked) =>
+                              setSelectedWealthIndices((current) =>
+                                toggleSelectedIds(current, index, checked)
+                              )
+                            }
+                            aria-label={`选择补充信息 ${entry.key || index + 1}`}
+                          />
+                        </TableCell>
+                        <TableCell className='font-medium'>
+                          {entry.key || '-'}
+                        </TableCell>
+                        <TableCell className='max-w-xl'>
+                          <div className='truncate text-sm'>
+                            {entry.value || '-'}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className='flex flex-wrap justify-end gap-2'>
+                            {access.canUpdate ? (
+                              <Button
+                                type='button'
+                                variant='outline'
+                                size='sm'
+                                onClick={() => openWealthDialog(index)}
+                              >
+                                编辑
+                              </Button>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {!filteredWealthEntries.length ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={4}
+                          className='text-muted-foreground py-12 text-center'
+                        >
+                          暂无数据
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </>
+        );
+      }
 
       case 'closed':
         return null;
@@ -2976,6 +3322,275 @@ export function AccountsManagementClient({
                   : platformEditingId
                     ? '保存修改'
                     : '创建平台'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={keyDialogOpen}
+        onOpenChange={(open) => {
+          setKeyDialogOpen(open);
+          if (!open) {
+            setEditingKeyId(null);
+            setKeyForm(createDefaultKeyForm());
+          }
+        }}
+      >
+        <DialogContent className='border-border/60 bg-background/95 overflow-hidden p-0 shadow-2xl sm:max-w-2xl'>
+          <DialogHeader className='border-border/60 border-b px-6 pt-6 pb-4'>
+            <DialogTitle>{editingKeyId ? '编辑密钥' : '新增密钥'}</DialogTitle>
+            <DialogDescription>
+              在弹窗中维护密钥标题、内容和过期时间。
+            </DialogDescription>
+          </DialogHeader>
+          <form className='space-y-5 px-6 pt-5 pb-6' onSubmit={handleKeySubmit}>
+            <div className='grid gap-2'>
+              <div className='text-sm font-medium'>密钥标题</div>
+              <Input
+                value={keyForm.title}
+                onChange={(event) =>
+                  setKeyForm((current) => ({
+                    ...current,
+                    title: event.target.value
+                  }))
+                }
+                placeholder='请输入密钥标题'
+                className='h-11 rounded-xl px-4'
+              />
+            </div>
+
+            <div className='grid gap-2'>
+              <div className='text-sm font-medium'>密钥内容</div>
+              <Textarea
+                value={keyForm.content}
+                onChange={(event) =>
+                  setKeyForm((current) => ({
+                    ...current,
+                    content: event.target.value
+                  }))
+                }
+                rows={6}
+                placeholder='请输入密钥内容'
+                className='rounded-2xl px-4 py-3'
+              />
+            </div>
+
+            <div className='grid gap-2'>
+              <div className='text-sm font-medium'>过期时间</div>
+              <Input
+                type='datetime-local'
+                value={keyForm.expiresAt}
+                onChange={(event) =>
+                  setKeyForm((current) => ({
+                    ...current,
+                    expiresAt: event.target.value
+                  }))
+                }
+                className='h-11 rounded-xl px-4'
+              />
+            </div>
+
+            <DialogFooter className='border-border/60 border-t px-0 pt-4'>
+              <Button
+                type='button'
+                variant='outline'
+                className='rounded-xl'
+                onClick={() => {
+                  setKeyDialogOpen(false);
+                  setEditingKeyId(null);
+                  setKeyForm(createDefaultKeyForm());
+                }}
+              >
+                取消
+              </Button>
+              <Button
+                type='submit'
+                className='rounded-xl'
+                disabled={submitPending}
+              >
+                {submitPending
+                  ? '保存中...'
+                  : editingKeyId
+                    ? '保存修改'
+                    : '创建密钥'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={securityDialogOpen}
+        onOpenChange={(open) => {
+          setSecurityDialogOpen(open);
+          if (!open) {
+            setEditingSecurityId(null);
+            setSecurityForm(createDefaultSecurityForm());
+          }
+        }}
+      >
+        <DialogContent className='border-border/60 bg-background/95 overflow-hidden p-0 shadow-2xl sm:max-w-2xl'>
+          <DialogHeader className='border-border/60 border-b px-6 pt-6 pb-4'>
+            <DialogTitle>
+              {editingSecurityId ? '编辑密保' : '新增密保'}
+            </DialogTitle>
+            <DialogDescription>
+              统一在弹窗里维护密保类型和明文内容。
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className='space-y-5 px-6 pt-5 pb-6'
+            onSubmit={handleSecuritySubmit}
+          >
+            <div className='grid gap-2'>
+              <div className='text-sm font-medium'>密保类型</div>
+              <Select
+                value={securityForm.securityType}
+                onValueChange={(
+                  value: ManagedAccountSecuritySummary['securityType']
+                ) =>
+                  setSecurityForm((current) => ({
+                    ...current,
+                    securityType: value
+                  }))
+                }
+              >
+                <SelectTrigger className='h-11 rounded-xl px-4'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='question'>问题验证</SelectItem>
+                  <SelectItem value='two_factor'>2FA验证</SelectItem>
+                  <SelectItem value='contact'>联系人</SelectItem>
+                  <SelectItem value='emergency_email'>紧急邮箱</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className='grid gap-2'>
+              <div className='text-sm font-medium'>密保内容</div>
+              <Textarea
+                value={securityForm.content}
+                onChange={(event) =>
+                  setSecurityForm((current) => ({
+                    ...current,
+                    content: event.target.value
+                  }))
+                }
+                rows={6}
+                placeholder='请输入密保内容'
+                className='rounded-2xl px-4 py-3'
+              />
+            </div>
+
+            <DialogFooter className='border-border/60 border-t px-0 pt-4'>
+              <Button
+                type='button'
+                variant='outline'
+                className='rounded-xl'
+                onClick={() => {
+                  setSecurityDialogOpen(false);
+                  setEditingSecurityId(null);
+                  setSecurityForm(createDefaultSecurityForm());
+                }}
+              >
+                取消
+              </Button>
+              <Button
+                type='submit'
+                className='rounded-xl'
+                disabled={submitPending}
+              >
+                {submitPending
+                  ? '保存中...'
+                  : editingSecurityId
+                    ? '保存修改'
+                    : '创建密保'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={wealthDialogOpen}
+        onOpenChange={(open) => {
+          setWealthDialogOpen(open);
+          if (!open) {
+            setEditingWealthIndex(null);
+            setWealthForm(createDefaultWealthForm());
+          }
+        }}
+      >
+        <DialogContent className='border-border/60 bg-background/95 overflow-hidden p-0 shadow-2xl sm:max-w-2xl'>
+          <DialogHeader className='border-border/60 border-b px-6 pt-6 pb-4'>
+            <DialogTitle>
+              {editingWealthIndex === null ? '新增补充信息' : '编辑补充信息'}
+            </DialogTitle>
+            <DialogDescription>
+              使用键值对维护账号的补充展示内容。
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className='space-y-5 px-6 pt-5 pb-6'
+            onSubmit={handleWealthEntrySubmit}
+          >
+            <div className='grid gap-2'>
+              <div className='text-sm font-medium'>标题</div>
+              <Input
+                value={wealthForm.key}
+                onChange={(event) =>
+                  setWealthForm((current) => ({
+                    ...current,
+                    key: event.target.value
+                  }))
+                }
+                placeholder='例如：资产备注'
+                className='h-11 rounded-xl px-4'
+              />
+            </div>
+
+            <div className='grid gap-2'>
+              <div className='text-sm font-medium'>内容</div>
+              <Textarea
+                value={wealthForm.value}
+                onChange={(event) =>
+                  setWealthForm((current) => ({
+                    ...current,
+                    value: event.target.value
+                  }))
+                }
+                rows={5}
+                placeholder='请输入补充信息内容'
+                className='rounded-2xl px-4 py-3'
+              />
+            </div>
+
+            <DialogFooter className='border-border/60 border-t px-0 pt-4'>
+              <Button
+                type='button'
+                variant='outline'
+                className='rounded-xl'
+                onClick={() => {
+                  setWealthDialogOpen(false);
+                  setEditingWealthIndex(null);
+                  setWealthForm(createDefaultWealthForm());
+                }}
+              >
+                取消
+              </Button>
+              <Button
+                type='submit'
+                className='rounded-xl'
+                disabled={submitPending}
+              >
+                {submitPending
+                  ? '保存中...'
+                  : editingWealthIndex === null
+                    ? '创建补充信息'
+                    : '保存修改'}
               </Button>
             </DialogFooter>
           </form>
