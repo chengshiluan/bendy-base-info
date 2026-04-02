@@ -13,6 +13,10 @@ import type {
   PaginatedResult
 } from '@/lib/platform/types';
 import { PlatformMutationError } from '@/lib/platform/mutations';
+import {
+  decryptManagedAccountPassword,
+  parseManagedAccountStorage
+} from './password';
 
 type SearchPageQuery = {
   workspaceId?: string;
@@ -51,31 +55,6 @@ function matchesKeyword(
   return values
     .filter((value): value is string => Boolean(value))
     .some((value) => value.toLowerCase().includes(keyword));
-}
-
-function parseWealthEntries(
-  value: string | null | undefined
-): ManagedWealthEntry[] {
-  if (!value) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(value) as Record<string, unknown>;
-
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return [];
-    }
-
-    return Object.entries(parsed)
-      .filter(([key, entryValue]) => key.trim() && entryValue != null)
-      .map(([key, entryValue]) => ({
-        key,
-        value: String(entryValue)
-      }));
-  } catch (_error) {
-    return [];
-  }
 }
 
 function mapPlatformSummary(row: {
@@ -335,25 +314,29 @@ export async function listManagedAccounts(
     sourceMap.set(row.accountId, current);
   });
 
-  return rows.map((row) => ({
-    id: row.id,
-    workspaceId: row.workspaceId,
-    platformId: row.platformId,
-    platformName: row.platformName ?? null,
-    platformIconUrl: row.platformIconUrl ?? null,
-    platformUrl: row.platformUrl ?? null,
-    account: row.account,
-    attribute: row.attribute,
-    confidence: row.confidence,
-    keyCount: keyCountMap.get(row.id) ?? 0,
-    bindingCount: bindingCountMap.get(row.id) ?? 0,
-    registrationSources: sourceMap.get(row.id) ?? [],
-    hasPassword: Boolean(row.passwordHash),
-    securityCount: securityCountMap.get(row.id) ?? 0,
-    registeredAt: formatDateTime(row.registeredAt),
-    status: row.status,
-    wealthEntries: parseWealthEntries(row.wealthJson)
-  }));
+  return rows.map((row) => {
+    const storage = parseManagedAccountStorage(row.wealthJson);
+
+    return {
+      id: row.id,
+      workspaceId: row.workspaceId,
+      platformId: row.platformId,
+      platformName: row.platformName ?? null,
+      platformIconUrl: row.platformIconUrl ?? null,
+      platformUrl: row.platformUrl ?? null,
+      account: row.account,
+      attribute: row.attribute,
+      confidence: row.confidence,
+      keyCount: keyCountMap.get(row.id) ?? 0,
+      bindingCount: bindingCountMap.get(row.id) ?? 0,
+      registrationSources: sourceMap.get(row.id) ?? [],
+      hasPassword: Boolean(storage.passwordCiphertext || row.passwordHash),
+      securityCount: securityCountMap.get(row.id) ?? 0,
+      registeredAt: formatDateTime(row.registeredAt),
+      status: row.status,
+      wealthEntries: storage.wealthEntries
+    };
+  });
 }
 
 export async function listManagedAccountsPage(
@@ -553,6 +536,18 @@ export async function getManagedAccountDetail(
     })
   );
 
+  const storage = parseManagedAccountStorage(row.wealthJson);
+  const passwordPlaintext = storage.passwordCiphertext
+    ? decryptManagedAccountPassword(storage.passwordCiphertext)
+    : null;
+  const passwordMode = storage.passwordCiphertext
+    ? passwordPlaintext
+      ? 'encrypted'
+      : 'unavailable'
+    : row.passwordHash
+      ? 'legacy_hash'
+      : 'none';
+
   return {
     id: row.id,
     workspaceId: row.workspaceId,
@@ -567,14 +562,16 @@ export async function getManagedAccountDetail(
     bindingCount: mappedBindings.length,
     registrationSources: mappedSources,
     registrationSourceIds: mappedSources.map((source) => source.id),
-    hasPassword: Boolean(row.passwordHash),
+    hasPassword: Boolean(storage.passwordCiphertext || row.passwordHash),
     securityCount: mappedSecurities.length,
     registeredAt: formatDateTime(row.registeredAt),
     status: row.status,
-    wealthEntries: parseWealthEntries(row.wealthJson),
+    wealthEntries: storage.wealthEntries,
     keys: mappedKeys,
     bindings: mappedBindings,
-    securities: mappedSecurities
+    securities: mappedSecurities,
+    passwordMode,
+    passwordPlaintext
   };
 }
 
