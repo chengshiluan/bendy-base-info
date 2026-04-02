@@ -3111,7 +3111,7 @@ export function AccountsManagementClient({
                     <TableHead className='min-w-[96px]'>状态</TableHead>
                     <TableHead className='min-w-[120px]'>财富</TableHead>
                     <TableHead className='min-w-[168px]'>注册时间</TableHead>
-                    <TableHead className='w-[160px] min-w-[160px]'>
+                    <TableHead className='w-[112px] min-w-[112px]'>
                       操作
                     </TableHead>
                   </TableRow>
@@ -3268,35 +3268,17 @@ export function AccountsManagementClient({
                       <TableCell className='min-w-[168px]'>
                         {formatDateTimeLabel(account.registeredAt)}
                       </TableCell>
-                      <TableCell className='w-[160px] min-w-[160px]'>
-                        <div className='flex flex-nowrap gap-2'>
-                          {access.canUpdate ? (
-                            <Button
-                              type='button'
-                              variant='outline'
-                              size='sm'
-                              onClick={() => void openAccountEditor(account)}
-                            >
-                              编辑
-                            </Button>
-                          ) : null}
-                          {access.canDelete ? (
-                            <Button
-                              type='button'
-                              variant='outline'
-                              size='sm'
-                              onClick={() =>
-                                setDeleteTarget({
-                                  type: 'account',
-                                  ids: [account.id],
-                                  label: account.account
-                                })
-                              }
-                            >
-                              删除
-                            </Button>
-                          ) : null}
-                        </div>
+                      <TableCell className='w-[112px] min-w-[112px]'>
+                        {access.canUpdate ? (
+                          <Button
+                            type='button'
+                            variant='outline'
+                            size='sm'
+                            onClick={() => void openAccountEditor(account)}
+                          >
+                            编辑
+                          </Button>
+                        ) : null}
                       </TableCell>
                     </TableRow>
                   ))}
