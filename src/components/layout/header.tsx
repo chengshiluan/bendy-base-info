@@ -15,7 +15,7 @@ export default function Header() {
         <Breadcrumbs />
       </div>
 
-      <div className='flex items-center gap-2 px-4'>
+      <div className='flex items-center gap-2 pr-6 pl-4 md:pr-8'>
         <div className='hidden md:flex'>
           <SearchInput />
         </div>

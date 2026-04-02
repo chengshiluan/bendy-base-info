@@ -278,10 +278,10 @@ function PlatformIcon({
     <img
       src={iconUrl}
       alt={name || 'platform icon'}
-      className='size-8 rounded-md border object-cover'
+      className='size-8 shrink-0 rounded-lg border object-cover'
     />
   ) : (
-    <div className='bg-muted text-muted-foreground flex size-8 items-center justify-center rounded-md border text-xs'>
+    <div className='bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-lg border text-xs'>
       {name?.slice(0, 1) || '?'}
     </div>
   );
@@ -390,7 +390,9 @@ export function AccountsManagementClient({
   const [wideSheetWidth, setWideSheetWidth] = useState(1080);
   const [resizingWideSheet, setResizingWideSheet] = useState(false);
   const canManageNested = access.canCreate || access.canUpdate;
-  const sheetOpen = activeSheet.type !== 'closed';
+  const accountDialogOpen = activeSheet.type === 'account-editor';
+  const sheetOpen =
+    activeSheet.type !== 'closed' && activeSheet.type !== 'account-editor';
   const wideSheetActive =
     activeSheet.type === 'platforms' ||
     activeSheet.type === 'sources' ||
@@ -399,6 +401,9 @@ export function AccountsManagementClient({
     activeSheet.type === 'wealth';
   const toolbarButtonClassName =
     'h-10 rounded-xl px-4 focus-visible:bg-white focus-visible:text-black active:bg-white active:text-black';
+  const dialogFieldClassName = 'h-11 rounded-xl px-4';
+  const dialogSectionClassName =
+    'rounded-2xl border border-border/60 bg-background/40 p-5';
   const statusTriggerLabel =
     statusFilter === 'all' ? '状态' : getAccountStatusLabel(statusFilter);
   const attributeTriggerLabel =
@@ -1517,6 +1522,244 @@ export function AccountsManagementClient({
     }
   }
 
+  function renderAccountDialogContent() {
+    if (activeSheet.type !== 'account-editor') {
+      return null;
+    }
+
+    const isEditingAccount = Boolean(activeSheet.accountId);
+    const passwordHint = isEditingAccount
+      ? '留空表示保持当前已加密密码。'
+      : '可选，提交后会按 MD5 规则入库。';
+
+    return (
+      <DialogContent className='border-border/60 bg-background/95 overflow-hidden p-0 shadow-2xl sm:max-w-3xl'>
+        <DialogHeader className='border-border/60 border-b px-6 pt-6 pb-4'>
+          <DialogTitle>
+            {isEditingAccount ? '编辑账号' : '新增账号'}
+          </DialogTitle>
+          <DialogDescription>
+            账号主体在弹窗中维护基础字段，注册源与补充信息继续在对应详情列表中维护。
+          </DialogDescription>
+        </DialogHeader>
+
+        {sheetPending ? (
+          <div className='flex min-h-[360px] items-center justify-center px-6 py-12'>
+            <Loader2 className='text-muted-foreground size-5 animate-spin' />
+          </div>
+        ) : (
+          <form
+            className='flex max-h-[calc(100vh-8rem)] flex-col'
+            onSubmit={handleAccountSubmit}
+          >
+            <div className='space-y-5 overflow-y-auto px-6 pt-5 pb-5'>
+              <section className={dialogSectionClassName}>
+                <div className='space-y-1'>
+                  <div className='text-muted-foreground text-xs font-semibold tracking-[0.18em] uppercase'>
+                    基础信息
+                  </div>
+                  <div className='text-muted-foreground text-sm'>
+                    先绑定主平台和账号主体，保持列表结构清晰可读。
+                  </div>
+                </div>
+
+                <div className='mt-5 grid gap-5 md:grid-cols-2'>
+                  <div className='grid gap-2'>
+                    <div className='text-sm font-medium'>主平台</div>
+                    <Select
+                      value={accountForm.platformId || 'none'}
+                      onValueChange={(value) =>
+                        setAccountForm((current) => ({
+                          ...current,
+                          platformId: value === 'none' ? '' : value
+                        }))
+                      }
+                    >
+                      <SelectTrigger className={dialogFieldClassName}>
+                        <SelectValue placeholder='请选择平台' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value='none'>暂不绑定</SelectItem>
+                        {platforms.map((platform) => (
+                          <SelectItem
+                            key={platform.id}
+                            value={String(platform.id)}
+                          >
+                            {platform.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className='grid gap-2'>
+                    <div className='text-sm font-medium'>账号</div>
+                    <Input
+                      value={accountForm.account}
+                      onChange={(event) =>
+                        setAccountForm((current) => ({
+                          ...current,
+                          account: event.target.value
+                        }))
+                      }
+                      placeholder='请输入账号'
+                      className={dialogFieldClassName}
+                    />
+                  </div>
+                </div>
+
+                <div className='mt-5 grid gap-5 md:grid-cols-2'>
+                  <div className='grid gap-2'>
+                    <div className='text-sm font-medium'>属性</div>
+                    <Select
+                      value={accountForm.attribute}
+                      onValueChange={(
+                        value: ManagedAccountSummary['attribute']
+                      ) =>
+                        setAccountForm((current) => ({
+                          ...current,
+                          attribute: value
+                        }))
+                      }
+                    >
+                      <SelectTrigger className={dialogFieldClassName}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value='self_hosted'>自托管</SelectItem>
+                        <SelectItem value='third_party'>三方</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className='grid gap-2'>
+                    <div className='text-sm font-medium'>置信度</div>
+                    <Select
+                      value={accountForm.confidence}
+                      onValueChange={(
+                        value: ManagedAccountSummary['confidence']
+                      ) =>
+                        setAccountForm((current) => ({
+                          ...current,
+                          confidence: value
+                        }))
+                      }
+                    >
+                      <SelectTrigger className={dialogFieldClassName}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value='very_high'>极高</SelectItem>
+                        <SelectItem value='high'>高</SelectItem>
+                        <SelectItem value='medium'>中</SelectItem>
+                        <SelectItem value='low'>低</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </section>
+
+              <section className={dialogSectionClassName}>
+                <div className='space-y-1'>
+                  <div className='text-muted-foreground text-xs font-semibold tracking-[0.18em] uppercase'>
+                    状态与安全
+                  </div>
+                  <div className='text-muted-foreground text-sm'>
+                    保持密码、状态和注册时间分区展示，避免字段贴边堆叠。
+                  </div>
+                </div>
+
+                <div className='mt-5 grid gap-5 md:grid-cols-2'>
+                  <div className='grid gap-2'>
+                    <div className='text-sm font-medium'>密码</div>
+                    <Input
+                      type='password'
+                      value={accountForm.password}
+                      onChange={(event) =>
+                        setAccountForm((current) => ({
+                          ...current,
+                          password: event.target.value
+                        }))
+                      }
+                      placeholder={
+                        isEditingAccount
+                          ? '留空表示保持原密码'
+                          : '可选，保存后按 MD5 入库'
+                      }
+                      className={dialogFieldClassName}
+                    />
+                    <div className='text-muted-foreground text-xs'>
+                      {passwordHint}
+                    </div>
+                  </div>
+
+                  <div className='grid gap-2'>
+                    <div className='text-sm font-medium'>注册时间</div>
+                    <Input
+                      type='datetime-local'
+                      value={accountForm.registeredAt}
+                      onChange={(event) =>
+                        setAccountForm((current) => ({
+                          ...current,
+                          registeredAt: event.target.value
+                        }))
+                      }
+                      className={dialogFieldClassName}
+                    />
+                  </div>
+                </div>
+
+                <div className='mt-5 grid gap-2 md:max-w-[240px]'>
+                  <div className='text-sm font-medium'>状态</div>
+                  <Select
+                    value={accountForm.status}
+                    onValueChange={(value: ManagedAccountSummary['status']) =>
+                      setAccountForm((current) => ({
+                        ...current,
+                        status: value
+                      }))
+                    }
+                  >
+                    <SelectTrigger className={dialogFieldClassName}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='available'>可用</SelectItem>
+                      <SelectItem value='banned'>封禁</SelectItem>
+                      <SelectItem value='cancelled'>已注销</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </section>
+            </div>
+
+            <DialogFooter className='border-border/60 border-t px-6 py-4'>
+              <Button
+                type='button'
+                variant='outline'
+                className='rounded-xl'
+                onClick={closeSheet}
+              >
+                取消
+              </Button>
+              <Button
+                type='submit'
+                className='rounded-xl'
+                disabled={submitPending}
+              >
+                {submitPending
+                  ? '保存中...'
+                  : isEditingAccount
+                    ? '保存修改'
+                    : '创建账号'}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    );
+  }
+
   function renderSheetContent() {
     if (sheetPending) {
       return (
@@ -1528,178 +1771,7 @@ export function AccountsManagementClient({
 
     switch (activeSheet.type) {
       case 'account-editor':
-        return (
-          <>
-            <SheetHeader>
-              <SheetTitle>
-                {activeSheet.accountId ? '编辑账号' : '新增账号'}
-              </SheetTitle>
-              <SheetDescription>
-                账号主体维护账号名、主平台、属性、置信度、密码和状态，注册源与财富等补充信息可在详情抽屉中继续维护。
-              </SheetDescription>
-            </SheetHeader>
-            <form className='mt-6 space-y-4' onSubmit={handleAccountSubmit}>
-              <div className='grid gap-2'>
-                <div className='text-sm font-medium'>主平台</div>
-                <Select
-                  value={accountForm.platformId || 'none'}
-                  onValueChange={(value) =>
-                    setAccountForm((current) => ({
-                      ...current,
-                      platformId: value === 'none' ? '' : value
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder='请选择平台' />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value='none'>暂不绑定</SelectItem>
-                    {platforms.map((platform) => (
-                      <SelectItem key={platform.id} value={String(platform.id)}>
-                        {platform.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className='grid gap-2'>
-                <div className='text-sm font-medium'>账号</div>
-                <Input
-                  value={accountForm.account}
-                  onChange={(event) =>
-                    setAccountForm((current) => ({
-                      ...current,
-                      account: event.target.value
-                    }))
-                  }
-                  placeholder='请输入账号'
-                />
-              </div>
-
-              <div className='grid gap-4 md:grid-cols-2'>
-                <div className='grid gap-2'>
-                  <div className='text-sm font-medium'>属性</div>
-                  <Select
-                    value={accountForm.attribute}
-                    onValueChange={(
-                      value: ManagedAccountSummary['attribute']
-                    ) =>
-                      setAccountForm((current) => ({
-                        ...current,
-                        attribute: value
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value='self_hosted'>自托管</SelectItem>
-                      <SelectItem value='third_party'>三方</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className='grid gap-2'>
-                  <div className='text-sm font-medium'>置信度</div>
-                  <Select
-                    value={accountForm.confidence}
-                    onValueChange={(
-                      value: ManagedAccountSummary['confidence']
-                    ) =>
-                      setAccountForm((current) => ({
-                        ...current,
-                        confidence: value
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value='very_high'>极高</SelectItem>
-                      <SelectItem value='high'>高</SelectItem>
-                      <SelectItem value='medium'>中</SelectItem>
-                      <SelectItem value='low'>低</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className='grid gap-4 md:grid-cols-2'>
-                <div className='grid gap-2'>
-                  <div className='text-sm font-medium'>密码</div>
-                  <Input
-                    type='password'
-                    value={accountForm.password}
-                    onChange={(event) =>
-                      setAccountForm((current) => ({
-                        ...current,
-                        password: event.target.value
-                      }))
-                    }
-                    placeholder={
-                      activeSheet.accountId
-                        ? '留空表示保持原密码'
-                        : '可选，保存后按 MD5 入库'
-                    }
-                  />
-                </div>
-
-                <div className='grid gap-2'>
-                  <div className='text-sm font-medium'>注册时间</div>
-                  <Input
-                    type='datetime-local'
-                    value={accountForm.registeredAt}
-                    onChange={(event) =>
-                      setAccountForm((current) => ({
-                        ...current,
-                        registeredAt: event.target.value
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className='grid gap-2'>
-                <div className='text-sm font-medium'>状态</div>
-                <Select
-                  value={accountForm.status}
-                  onValueChange={(value: ManagedAccountSummary['status']) =>
-                    setAccountForm((current) => ({
-                      ...current,
-                      status: value
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value='available'>可用</SelectItem>
-                    <SelectItem value='banned'>封禁</SelectItem>
-                    <SelectItem value='cancelled'>已注销</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className='flex items-center justify-end gap-2 pt-2'>
-                <Button type='button' variant='outline' onClick={closeSheet}>
-                  取消
-                </Button>
-                <Button type='submit' disabled={submitPending}>
-                  {submitPending
-                    ? '保存中...'
-                    : activeSheet.accountId
-                      ? '保存修改'
-                      : '创建账号'}
-                </Button>
-              </div>
-            </form>
-          </>
-        );
+        return null;
 
       case 'platforms': {
         const allPlatformsSelected =
@@ -1781,7 +1853,7 @@ export function AccountsManagementClient({
               </form>
 
               <div className='min-h-0 flex-1 overflow-auto py-4'>
-                <Table>
+                <Table className='min-w-[860px]'>
                   <TableHeader>
                     <TableRow>
                       <TableHead className='w-12'>
@@ -1989,7 +2061,7 @@ export function AccountsManagementClient({
               </form>
 
               <div className='min-h-0 flex-1 overflow-auto py-4'>
-                <Table>
+                <Table className='min-w-[980px]'>
                   <TableHeader>
                     <TableRow>
                       <TableHead className='w-12'>
@@ -2390,7 +2462,7 @@ export function AccountsManagementClient({
               </form>
 
               <div className='min-h-0 flex-1 overflow-auto py-4'>
-                <Table>
+                <Table className='min-w-[1040px]'>
                   <TableHeader>
                     <TableRow>
                       <TableHead className='w-12'>
@@ -2604,7 +2676,7 @@ export function AccountsManagementClient({
               </form>
 
               <div className='min-h-0 flex-1 overflow-auto py-4'>
-                <Table>
+                <Table className='min-w-[820px]'>
                   <TableHeader>
                     <TableRow>
                       <TableHead className='w-12'>
@@ -2771,7 +2843,7 @@ export function AccountsManagementClient({
               </form>
 
               <div className='min-h-0 flex-1 overflow-auto py-4'>
-                <Table>
+                <Table className='min-w-[760px]'>
                   <TableHeader>
                     <TableRow>
                       <TableHead className='w-12'>
@@ -3002,8 +3074,8 @@ export function AccountsManagementClient({
           </form>
         </CardHeader>
         <CardContent>
-          <div className='overflow-x-auto'>
-            <Table>
+          <div className='border-border/60 overflow-hidden rounded-2xl border'>
+            <Table className='min-w-[1680px]'>
               <TableHeader>
                 <TableRow>
                   <TableHead className='w-12'>
@@ -3023,20 +3095,22 @@ export function AccountsManagementClient({
                       aria-label='全选账号'
                     />
                   </TableHead>
-                  <TableHead>icon</TableHead>
-                  <TableHead>平台</TableHead>
-                  <TableHead>账号</TableHead>
-                  <TableHead>属性</TableHead>
-                  <TableHead>置信度</TableHead>
-                  <TableHead>密钥</TableHead>
-                  <TableHead>绑定信息</TableHead>
-                  <TableHead>注册源</TableHead>
-                  <TableHead>密码</TableHead>
-                  <TableHead>密保</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead>财富</TableHead>
-                  <TableHead>注册时间</TableHead>
-                  <TableHead>操作</TableHead>
+                  <TableHead className='w-[84px] min-w-[84px]'>icon</TableHead>
+                  <TableHead className='min-w-[120px]'>平台</TableHead>
+                  <TableHead className='min-w-[240px]'>账号</TableHead>
+                  <TableHead className='min-w-[96px]'>属性</TableHead>
+                  <TableHead className='min-w-[96px]'>置信度</TableHead>
+                  <TableHead className='min-w-[108px]'>密钥</TableHead>
+                  <TableHead className='min-w-[120px]'>绑定信息</TableHead>
+                  <TableHead className='min-w-[180px]'>注册源</TableHead>
+                  <TableHead className='min-w-[116px]'>密码</TableHead>
+                  <TableHead className='min-w-[108px]'>密保</TableHead>
+                  <TableHead className='min-w-[96px]'>状态</TableHead>
+                  <TableHead className='min-w-[120px]'>财富</TableHead>
+                  <TableHead className='min-w-[168px]'>注册时间</TableHead>
+                  <TableHead className='w-[160px] min-w-[160px]'>
+                    操作
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -3053,13 +3127,15 @@ export function AccountsManagementClient({
                         aria-label={`选择账号 ${account.account}`}
                       />
                     </TableCell>
-                    <TableCell>
-                      <PlatformIcon
-                        iconUrl={account.platformIconUrl}
-                        name={account.platformName}
-                      />
+                    <TableCell className='w-[84px] min-w-[84px]'>
+                      <div className='flex items-center justify-center'>
+                        <PlatformIcon
+                          iconUrl={account.platformIconUrl}
+                          name={account.platformName}
+                        />
+                      </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className='min-w-[120px]'>
                       {account.platformName ? (
                         <ActionLinkButton
                           disabled={!canManageNested}
@@ -3080,14 +3156,16 @@ export function AccountsManagementClient({
                         </ActionLinkButton>
                       )}
                     </TableCell>
-                    <TableCell>
-                      <div className='flex items-center gap-2'>
-                        <span>{account.account}</span>
+                    <TableCell className='min-w-[240px]'>
+                      <div className='flex min-w-[220px] items-center gap-2'>
+                        <span className='block max-w-[190px] truncate'>
+                          {account.account}
+                        </span>
                         <Button
                           type='button'
                           variant='outline'
                           size='icon'
-                          className='size-7'
+                          className='size-8 shrink-0 rounded-lg'
                           onClick={() =>
                             void handleCopy(account.account, '账号')
                           }
@@ -3096,17 +3174,17 @@ export function AccountsManagementClient({
                         </Button>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className='min-w-[96px]'>
                       <Badge variant='outline'>
                         {getAccountAttributeLabel(account.attribute)}
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className='min-w-[96px]'>
                       <Badge variant='outline'>
                         {getAccountConfidenceLabel(account.confidence)}
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className='min-w-[108px]'>
                       <ActionLinkButton
                         disabled={!canManageNested}
                         onClick={() => void openAccountSheet('keys', account)}
@@ -3116,7 +3194,7 @@ export function AccountsManagementClient({
                           : '添加'}
                       </ActionLinkButton>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className='min-w-[120px]'>
                       <ActionLinkButton
                         disabled={!canManageNested}
                         onClick={() =>
@@ -3128,7 +3206,7 @@ export function AccountsManagementClient({
                           : '绑定'}
                       </ActionLinkButton>
                     </TableCell>
-                    <TableCell className='max-w-xs'>
+                    <TableCell className='max-w-xs min-w-[180px]'>
                       {account.registrationSources.length ? (
                         <div className='flex flex-wrap gap-2'>
                           {account.registrationSources.map((source) => (
@@ -3154,10 +3232,10 @@ export function AccountsManagementClient({
                         </ActionLinkButton>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className='min-w-[116px]'>
                       {account.hasPassword ? '已加密存储' : '未设置'}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className='min-w-[108px]'>
                       <ActionLinkButton
                         disabled={!canManageNested}
                         onClick={() =>
@@ -3169,12 +3247,12 @@ export function AccountsManagementClient({
                           : '添加'}
                       </ActionLinkButton>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className='min-w-[96px]'>
                       <Badge variant='outline'>
                         {getAccountStatusLabel(account.status)}
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className='min-w-[120px]'>
                       <ActionLinkButton
                         disabled={!canManageNested}
                         onClick={() => void openAccountSheet('wealth', account)}
@@ -3182,11 +3260,11 @@ export function AccountsManagementClient({
                         {account.wealthEntries.length ? '详情' : '补充信息'}
                       </ActionLinkButton>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className='min-w-[168px]'>
                       {formatDateTimeLabel(account.registeredAt)}
                     </TableCell>
-                    <TableCell>
-                      <div className='flex gap-2'>
+                    <TableCell className='w-[160px] min-w-[160px]'>
+                      <div className='flex flex-nowrap gap-2'>
                         {access.canUpdate ? (
                           <Button
                             type='button'
@@ -3240,6 +3318,17 @@ export function AccountsManagementClient({
           </div>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={accountDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeSheet();
+          }
+        }}
+      >
+        {renderAccountDialogContent()}
+      </Dialog>
 
       <Sheet
         open={sheetOpen}
