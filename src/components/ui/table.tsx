@@ -4,17 +4,38 @@ import * as React from 'react';
 
 import { cn } from '@/lib/utils';
 
-function Table({ className, ...props }: React.ComponentProps<'table'>) {
+type TableProps = React.ComponentProps<'table'> & {
+  containerClassName?: string;
+  disableContainer?: boolean;
+};
+
+function Table({
+  className,
+  containerClassName,
+  disableContainer = false,
+  ...props
+}: TableProps) {
+  const table = (
+    <table
+      data-slot='table'
+      className={cn('w-max min-w-full caption-bottom text-sm', className)}
+      {...props}
+    />
+  );
+
+  if (disableContainer) {
+    return table;
+  }
+
   return (
     <div
       data-slot='table-container'
-      className='relative w-full min-w-0 overflow-x-auto'
+      className={cn(
+        'relative w-full max-w-full min-w-0 overflow-x-auto',
+        containerClassName
+      )}
     >
-      <table
-        data-slot='table'
-        className={cn('w-max min-w-full caption-bottom text-sm', className)}
-        {...props}
-      />
+      {table}
     </div>
   );
 }
