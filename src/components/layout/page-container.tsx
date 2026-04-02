@@ -5,7 +5,7 @@ import type { InfobarContent } from '@/components/ui/infobar';
 
 function PageSkeleton() {
   return (
-    <div className='flex flex-1 animate-pulse flex-col gap-4 p-4 md:px-6'>
+    <div className='flex min-w-0 flex-1 animate-pulse flex-col gap-4 p-4 md:px-6'>
       <div className='flex items-center justify-between'>
         <div>
           <div className='bg-muted mb-2 h-8 w-48 rounded' />
@@ -41,7 +41,7 @@ export default function PageContainer({
 }) {
   if (!access) {
     return (
-      <div className='flex flex-1 items-center justify-center p-4 md:px-6'>
+      <div className='flex min-w-0 flex-1 items-center justify-center p-4 md:px-6'>
         {accessFallback ?? (
           <div className='text-muted-foreground text-center text-lg'>
             You do not have access to this page.
@@ -54,28 +54,30 @@ export default function PageContainer({
   const content = isloading ? <PageSkeleton /> : children;
 
   return scrollable ? (
-    <ScrollArea className='h-[calc(100dvh-52px)]'>
-      <div className='flex flex-1 flex-col p-4 md:px-6'>
-        <div className='mb-4 flex items-start justify-between'>
+    <ScrollArea className='h-[calc(100dvh-52px)] min-w-0'>
+      <div className='flex min-w-0 flex-1 flex-col p-4 md:px-6'>
+        <div className='mb-4 flex min-w-0 items-start justify-between gap-4'>
           <Heading
             title={pageTitle ?? ''}
             description={pageDescription ?? ''}
             infoContent={infoContent}
           />
-          {pageHeaderAction && <div>{pageHeaderAction}</div>}
+          {pageHeaderAction && (
+            <div className='shrink-0'>{pageHeaderAction}</div>
+          )}
         </div>
         {content}
       </div>
     </ScrollArea>
   ) : (
-    <div className='flex flex-1 flex-col p-4 md:px-6'>
-      <div className='mb-4 flex items-start justify-between'>
+    <div className='flex min-w-0 flex-1 flex-col p-4 md:px-6'>
+      <div className='mb-4 flex min-w-0 items-start justify-between gap-4'>
         <Heading
           title={pageTitle ?? ''}
           description={pageDescription ?? ''}
           infoContent={infoContent}
         />
-        {pageHeaderAction && <div>{pageHeaderAction}</div>}
+        {pageHeaderAction && <div className='shrink-0'>{pageHeaderAction}</div>}
       </div>
       {content}
     </div>
