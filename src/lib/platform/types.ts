@@ -250,4 +250,6 @@ export interface ManagedAccountDetail extends ManagedAccountSummary {
   bindings: ManagedAccountBindingSummary[];
   securities: ManagedAccountSecuritySummary[];
   registrationSourceIds: number[];
+  passwordMode: 'none' | 'encrypted' | 'legacy_hash' | 'unavailable';
+  passwordPlaintext: string | null;
 }

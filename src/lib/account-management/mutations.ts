@@ -9,6 +9,11 @@ import {
   getManagedPlatformById,
   getManagedRegistrationSourceById
 } from './service';
+import {
+  buildManagedAccountStorage,
+  encryptManagedAccountPassword,
+  parseManagedAccountStorage
+} from './password';
 
 type AccountPayload = {
   workspaceId: string;
@@ -108,33 +113,6 @@ function uniqueNumberValues(values: number[] = []) {
   );
 }
 
-function buildWealthJson(entries: Array<{ key: string; value: string }>) {
-  if (!entries.length) {
-    return null;
-  }
-
-  const valueMap: Record<string, string> = {};
-
-  entries.forEach((entry) => {
-    const key = entry.key.trim();
-    const value = entry.value.trim();
-
-    if (!key || !value) {
-      return;
-    }
-
-    if (key in valueMap) {
-      throw new PlatformMutationError(
-        `财富字段标题“${key}”重复，请调整后再保存。`
-      );
-    }
-
-    valueMap[key] = value;
-  });
-
-  return Object.keys(valueMap).length ? JSON.stringify(valueMap) : null;
-}
-
 function resolvePlatformIconUrl(url: string, iconUrl?: string | null) {
   const normalizedIconUrl = normalizeNullable(iconUrl);
 
@@ -218,7 +196,8 @@ async function getManagedAccountRecord(accountId: number) {
       workspaceId: schema.accountManagementAccounts.workspaceId,
       account: schema.accountManagementAccounts.account,
       platformId: schema.accountManagementAccounts.platformId,
-      passwordHash: schema.accountManagementAccounts.passwordHash
+      passwordHash: schema.accountManagementAccounts.passwordHash,
+      wealthJson: schema.accountManagementAccounts.wealthJson
     })
     .from(schema.accountManagementAccounts)
     .where(eq(schema.accountManagementAccounts.id, accountId));
@@ -316,8 +295,23 @@ export async function createManagedAccount(
   await ensurePlatformBelongsToWorkspace(input.platformId, input.workspaceId);
   const normalizedAccount = input.account.trim();
   const registeredAt = parseDateTimeInput(input.registeredAt, '注册时间');
-  const wealthJson = buildWealthJson(input.wealthEntries);
   const password = normalizeNullable(input.password);
+  const passwordCiphertext = password
+    ? encryptManagedAccountPassword(password)
+    : null;
+  let wealthJson: string | null;
+
+  try {
+    wealthJson = buildManagedAccountStorage(input.wealthEntries, {
+      passwordCiphertext
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new PlatformMutationError(error.message);
+    }
+
+    throw error;
+  }
 
   const [createdAccount] = await database
     .insert(schema.accountManagementAccounts)
@@ -370,8 +364,24 @@ export async function updateManagedAccount(
   const workspace = await getWorkspaceRecord(input.workspaceId);
   await ensurePlatformBelongsToWorkspace(input.platformId, input.workspaceId);
   const registeredAt = parseDateTimeInput(input.registeredAt, '注册时间');
-  const wealthJson = buildWealthJson(input.wealthEntries);
   const password = normalizeNullable(input.password);
+  const currentStorage = parseManagedAccountStorage(account.wealthJson);
+  const passwordCiphertext = password
+    ? encryptManagedAccountPassword(password)
+    : currentStorage.passwordCiphertext;
+  let wealthJson: string | null;
+
+  try {
+    wealthJson = buildManagedAccountStorage(input.wealthEntries, {
+      passwordCiphertext
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new PlatformMutationError(error.message);
+    }
+
+    throw error;
+  }
 
   await database
     .update(schema.accountManagementAccounts)

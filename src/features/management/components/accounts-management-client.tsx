@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import QRCode from 'qrcode';
 import { Copy, ExternalLink, Loader2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +23,11 @@ import {
   DialogTitle
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger
+} from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -284,6 +290,200 @@ function PlatformIcon({
     <div className='bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-lg border text-xs'>
       {name?.slice(0, 1) || '?'}
     </div>
+  );
+}
+
+function PasswordPreviewPopover({
+  account,
+  workspaceId,
+  onCopy
+}: {
+  account: ManagedAccountSummary;
+  workspaceId?: string;
+  onCopy: (value: string, label: string) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
+  const [detail, setDetail] = useState<ManagedAccountDetail | null>(null);
+  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setHasAttemptedLoad(false);
+      setDetail(null);
+      setQrCodeUrl(null);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (
+      !open ||
+      !workspaceId ||
+      !account.hasPassword ||
+      detail ||
+      loading ||
+      hasAttemptedLoad
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadPasswordDetail() {
+      setLoading(true);
+      setHasAttemptedLoad(true);
+
+      try {
+        const data = await requestJson<{ account: ManagedAccountDetail }>(
+          buildPathWithQuery(`/api/admin/accounts/${account.id}`, {
+            workspaceId
+          })
+        );
+
+        if (!cancelled) {
+          setDetail(data.account);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(getErrorMessage(error));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadPasswordDetail();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    account.hasPassword,
+    account.id,
+    detail,
+    hasAttemptedLoad,
+    loading,
+    open,
+    workspaceId
+  ]);
+
+  useEffect(() => {
+    if (
+      !open ||
+      detail?.passwordMode !== 'encrypted' ||
+      !detail.passwordPlaintext
+    ) {
+      setQrCodeUrl(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    void QRCode.toDataURL(detail.passwordPlaintext, {
+      margin: 1,
+      width: 112
+    })
+      .then((value) => {
+        if (!cancelled) {
+          setQrCodeUrl(value);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setQrCodeUrl(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detail?.passwordMode, detail?.passwordPlaintext, open]);
+
+  if (!account.hasPassword) {
+    return <span>未设置</span>;
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type='button'
+          className='underline decoration-dotted underline-offset-4'
+        >
+          已加密
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align='end' className='w-80 rounded-xl border p-4'>
+        <div className='space-y-3'>
+          <div>
+            <div className='text-sm font-medium'>密码详情</div>
+            <div className='text-muted-foreground text-xs'>
+              使用弹层查看二维码与原密码内容。
+            </div>
+          </div>
+
+          {loading ? (
+            <div className='flex items-center gap-2 py-2 text-sm'>
+              <Loader2 className='text-muted-foreground size-4 animate-spin' />
+              <span>正在加载密码信息...</span>
+            </div>
+          ) : detail?.passwordMode === 'encrypted' &&
+            detail.passwordPlaintext ? (
+            <>
+              <div className='flex justify-center'>
+                <div className='rounded-xl border bg-white p-2 shadow-sm'>
+                  {qrCodeUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={qrCodeUrl} alt='密码二维码' className='size-28' />
+                  ) : (
+                    <div className='flex size-28 items-center justify-center'>
+                      <Loader2 className='text-muted-foreground size-4 animate-spin' />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className='rounded-lg border bg-black/40'>
+                <div className='flex items-center justify-between border-b px-3 py-2'>
+                  <span className='text-muted-foreground text-xs font-medium'>
+                    原密码
+                  </span>
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='icon'
+                    className='size-7'
+                    onClick={() =>
+                      void onCopy(detail.passwordPlaintext as string, '原密码')
+                    }
+                  >
+                    <Copy className='size-3.5' />
+                  </Button>
+                </div>
+                <pre className='overflow-x-auto p-3 text-xs leading-6'>
+                  <code className='font-mono'>{detail.passwordPlaintext}</code>
+                </pre>
+              </div>
+            </>
+          ) : detail?.passwordMode === 'legacy_hash' ? (
+            <div className='text-muted-foreground rounded-lg border px-3 py-3 text-sm leading-6'>
+              这条历史数据只保留了旧哈希，当前无法恢复原密码。重新编辑并保存一次密码后，这里就能展示二维码和明文。
+            </div>
+          ) : detail?.passwordMode === 'unavailable' ? (
+            <div className='text-muted-foreground rounded-lg border px-3 py-3 text-sm leading-6'>
+              已检测到密码记录，但当前解密失败。请重新编辑并保存一次密码后再查看。
+            </div>
+          ) : (
+            <div className='text-muted-foreground rounded-lg border px-3 py-3 text-sm leading-6'>
+              当前没有可展示的密码内容。
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -1530,7 +1730,7 @@ export function AccountsManagementClient({
     const isEditingAccount = Boolean(activeSheet.accountId);
     const passwordHint = isEditingAccount
       ? '留空表示保持当前已加密密码。'
-      : '可选，提交后会按 MD5 规则入库。';
+      : '可选，提交后会加密存储，并支持在列表中查看明文。';
 
     return (
       <DialogContent className='border-border/60 bg-background/95 overflow-hidden p-0 shadow-2xl sm:max-w-3xl'>
@@ -1684,7 +1884,7 @@ export function AccountsManagementClient({
                       placeholder={
                         isEditingAccount
                           ? '留空表示保持原密码'
-                          : '可选，保存后按 MD5 入库'
+                          : '可选，保存后加密存储'
                       }
                       className={dialogFieldClassName}
                     />
@@ -3111,7 +3311,7 @@ export function AccountsManagementClient({
                     <TableHead className='min-w-[96px]'>状态</TableHead>
                     <TableHead className='min-w-[120px]'>财富</TableHead>
                     <TableHead className='min-w-[168px]'>注册时间</TableHead>
-                    <TableHead className='w-[112px] min-w-[112px]'>
+                    <TableHead className='w-[160px] min-w-[160px]'>
                       操作
                     </TableHead>
                   </TableRow>
@@ -3236,7 +3436,11 @@ export function AccountsManagementClient({
                         )}
                       </TableCell>
                       <TableCell className='min-w-[116px]'>
-                        {account.hasPassword ? '已加密存储' : '未设置'}
+                        <PasswordPreviewPopover
+                          account={account}
+                          workspaceId={workspaceId}
+                          onCopy={handleCopy}
+                        />
                       </TableCell>
                       <TableCell className='min-w-[108px]'>
                         <ActionLinkButton
@@ -3268,17 +3472,35 @@ export function AccountsManagementClient({
                       <TableCell className='min-w-[168px]'>
                         {formatDateTimeLabel(account.registeredAt)}
                       </TableCell>
-                      <TableCell className='w-[112px] min-w-[112px]'>
-                        {access.canUpdate ? (
-                          <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            onClick={() => void openAccountEditor(account)}
-                          >
-                            编辑
-                          </Button>
-                        ) : null}
+                      <TableCell className='w-[160px] min-w-[160px]'>
+                        <div className='flex flex-nowrap gap-2'>
+                          {access.canUpdate ? (
+                            <Button
+                              type='button'
+                              variant='outline'
+                              size='sm'
+                              onClick={() => void openAccountEditor(account)}
+                            >
+                              编辑
+                            </Button>
+                          ) : null}
+                          {access.canDelete ? (
+                            <Button
+                              type='button'
+                              variant='outline'
+                              size='sm'
+                              onClick={() =>
+                                setDeleteTarget({
+                                  type: 'account',
+                                  ids: [account.id],
+                                  label: account.account
+                                })
+                              }
+                            >
+                              删除
+                            </Button>
+                          ) : null}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
