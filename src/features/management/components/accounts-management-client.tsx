@@ -44,7 +44,6 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import type {
   ManagedAccountBindingSummary,
@@ -2949,7 +2948,7 @@ export function AccountsManagementClient({
 
   return (
     <>
-      <Card>
+      <Card className='min-w-0'>
         <CardHeader className='flex flex-col gap-4'>
           <div>
             <CardTitle>账号列表</CardTitle>
@@ -3076,245 +3075,238 @@ export function AccountsManagementClient({
         </CardHeader>
         <CardContent className='min-w-0'>
           <div className='border-border/60 min-w-0 rounded-2xl border'>
-            <ScrollArea className='w-full whitespace-nowrap'>
-              <Table className='min-w-[1680px]'>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className='w-12'>
+            <Table className='min-w-[1680px]'>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className='w-12'>
+                    <Checkbox
+                      checked={
+                        allAccountsSelected
+                          ? true
+                          : selectedAccountIds.length
+                            ? 'indeterminate'
+                            : false
+                      }
+                      onCheckedChange={(checked) =>
+                        setSelectedAccountIds(
+                          checked ? accounts.map((account) => account.id) : []
+                        )
+                      }
+                      aria-label='全选账号'
+                    />
+                  </TableHead>
+                  <TableHead className='w-[84px] min-w-[84px]'>icon</TableHead>
+                  <TableHead className='min-w-[120px]'>平台</TableHead>
+                  <TableHead className='min-w-[240px]'>账号</TableHead>
+                  <TableHead className='min-w-[96px]'>属性</TableHead>
+                  <TableHead className='min-w-[96px]'>置信度</TableHead>
+                  <TableHead className='min-w-[108px]'>密钥</TableHead>
+                  <TableHead className='min-w-[120px]'>绑定信息</TableHead>
+                  <TableHead className='min-w-[180px]'>注册源</TableHead>
+                  <TableHead className='min-w-[116px]'>密码</TableHead>
+                  <TableHead className='min-w-[108px]'>密保</TableHead>
+                  <TableHead className='min-w-[96px]'>状态</TableHead>
+                  <TableHead className='min-w-[120px]'>财富</TableHead>
+                  <TableHead className='min-w-[168px]'>注册时间</TableHead>
+                  <TableHead className='w-[160px] min-w-[160px]'>
+                    操作
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {accounts.map((account) => (
+                  <TableRow key={account.id}>
+                    <TableCell>
                       <Checkbox
-                        checked={
-                          allAccountsSelected
-                            ? true
-                            : selectedAccountIds.length
-                              ? 'indeterminate'
-                              : false
-                        }
+                        checked={selectedAccountIds.includes(account.id)}
                         onCheckedChange={(checked) =>
-                          setSelectedAccountIds(
-                            checked ? accounts.map((account) => account.id) : []
+                          setSelectedAccountIds((current) =>
+                            toggleSelectedIds(current, account.id, checked)
                           )
                         }
-                        aria-label='全选账号'
+                        aria-label={`选择账号 ${account.account}`}
                       />
-                    </TableHead>
-                    <TableHead className='w-[84px] min-w-[84px]'>
-                      icon
-                    </TableHead>
-                    <TableHead className='min-w-[120px]'>平台</TableHead>
-                    <TableHead className='min-w-[240px]'>账号</TableHead>
-                    <TableHead className='min-w-[96px]'>属性</TableHead>
-                    <TableHead className='min-w-[96px]'>置信度</TableHead>
-                    <TableHead className='min-w-[108px]'>密钥</TableHead>
-                    <TableHead className='min-w-[120px]'>绑定信息</TableHead>
-                    <TableHead className='min-w-[180px]'>注册源</TableHead>
-                    <TableHead className='min-w-[116px]'>密码</TableHead>
-                    <TableHead className='min-w-[108px]'>密保</TableHead>
-                    <TableHead className='min-w-[96px]'>状态</TableHead>
-                    <TableHead className='min-w-[120px]'>财富</TableHead>
-                    <TableHead className='min-w-[168px]'>注册时间</TableHead>
-                    <TableHead className='w-[160px] min-w-[160px]'>
-                      操作
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {accounts.map((account) => (
-                    <TableRow key={account.id}>
-                      <TableCell>
-                        <Checkbox
-                          checked={selectedAccountIds.includes(account.id)}
-                          onCheckedChange={(checked) =>
-                            setSelectedAccountIds((current) =>
-                              toggleSelectedIds(current, account.id, checked)
-                            )
-                          }
-                          aria-label={`选择账号 ${account.account}`}
+                    </TableCell>
+                    <TableCell className='w-[84px] min-w-[84px]'>
+                      <div className='flex items-center justify-center'>
+                        <PlatformIcon
+                          iconUrl={account.platformIconUrl}
+                          name={account.platformName}
                         />
-                      </TableCell>
-                      <TableCell className='w-[84px] min-w-[84px]'>
-                        <div className='flex items-center justify-center'>
-                          <PlatformIcon
-                            iconUrl={account.platformIconUrl}
-                            name={account.platformName}
-                          />
+                      </div>
+                    </TableCell>
+                    <TableCell className='min-w-[120px]'>
+                      {account.platformName ? (
+                        <ActionLinkButton
+                          disabled={!canManageNested}
+                          onClick={() =>
+                            void openAccountSheet('platforms', account)
+                          }
+                        >
+                          {account.platformName}
+                        </ActionLinkButton>
+                      ) : (
+                        <ActionLinkButton
+                          disabled={!canManageNested}
+                          onClick={() =>
+                            void openAccountSheet('platforms', account)
+                          }
+                        >
+                          绑定
+                        </ActionLinkButton>
+                      )}
+                    </TableCell>
+                    <TableCell className='min-w-[240px]'>
+                      <div className='flex min-w-[220px] items-center gap-2'>
+                        <span className='block max-w-[190px] truncate'>
+                          {account.account}
+                        </span>
+                        <Button
+                          type='button'
+                          variant='outline'
+                          size='icon'
+                          className='size-8 shrink-0 rounded-lg'
+                          onClick={() =>
+                            void handleCopy(account.account, '账号')
+                          }
+                        >
+                          <Copy className='size-4' />
+                        </Button>
+                      </div>
+                    </TableCell>
+                    <TableCell className='min-w-[96px]'>
+                      <Badge variant='outline'>
+                        {getAccountAttributeLabel(account.attribute)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className='min-w-[96px]'>
+                      <Badge variant='outline'>
+                        {getAccountConfidenceLabel(account.confidence)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className='min-w-[108px]'>
+                      <ActionLinkButton
+                        disabled={!canManageNested}
+                        onClick={() => void openAccountSheet('keys', account)}
+                      >
+                        {account.keyCount
+                          ? `详情（${account.keyCount}）`
+                          : '添加'}
+                      </ActionLinkButton>
+                    </TableCell>
+                    <TableCell className='min-w-[120px]'>
+                      <ActionLinkButton
+                        disabled={!canManageNested}
+                        onClick={() =>
+                          void openAccountSheet('bindings', account)
+                        }
+                      >
+                        {account.bindingCount
+                          ? `详情（${account.bindingCount}）`
+                          : '绑定'}
+                      </ActionLinkButton>
+                    </TableCell>
+                    <TableCell className='min-w-[180px]'>
+                      {account.registrationSources.length ? (
+                        <div className='inline-flex flex-nowrap gap-2'>
+                          {account.registrationSources.map((source) => (
+                            <ActionLinkButton
+                              key={source.id}
+                              disabled={!canManageNested}
+                              onClick={() =>
+                                void openAccountSheet('sources', account)
+                              }
+                            >
+                              {source.name}
+                            </ActionLinkButton>
+                          ))}
                         </div>
-                      </TableCell>
-                      <TableCell className='min-w-[120px]'>
-                        {account.platformName ? (
-                          <ActionLinkButton
-                            disabled={!canManageNested}
-                            onClick={() =>
-                              void openAccountSheet('platforms', account)
-                            }
-                          >
-                            {account.platformName}
-                          </ActionLinkButton>
-                        ) : (
-                          <ActionLinkButton
-                            disabled={!canManageNested}
-                            onClick={() =>
-                              void openAccountSheet('platforms', account)
-                            }
-                          >
-                            绑定
-                          </ActionLinkButton>
-                        )}
-                      </TableCell>
-                      <TableCell className='min-w-[240px]'>
-                        <div className='flex min-w-[220px] items-center gap-2'>
-                          <span className='block max-w-[190px] truncate'>
-                            {account.account}
-                          </span>
+                      ) : (
+                        <ActionLinkButton
+                          disabled={!canManageNested}
+                          onClick={() =>
+                            void openAccountSheet('sources', account)
+                          }
+                        >
+                          绑定
+                        </ActionLinkButton>
+                      )}
+                    </TableCell>
+                    <TableCell className='min-w-[116px]'>
+                      {account.hasPassword ? '已加密存储' : '未设置'}
+                    </TableCell>
+                    <TableCell className='min-w-[108px]'>
+                      <ActionLinkButton
+                        disabled={!canManageNested}
+                        onClick={() =>
+                          void openAccountSheet('securities', account)
+                        }
+                      >
+                        {account.securityCount
+                          ? `详情（${account.securityCount}）`
+                          : '添加'}
+                      </ActionLinkButton>
+                    </TableCell>
+                    <TableCell className='min-w-[96px]'>
+                      <Badge variant='outline'>
+                        {getAccountStatusLabel(account.status)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className='min-w-[120px]'>
+                      <ActionLinkButton
+                        disabled={!canManageNested}
+                        onClick={() => void openAccountSheet('wealth', account)}
+                      >
+                        {account.wealthEntries.length ? '详情' : '补充信息'}
+                      </ActionLinkButton>
+                    </TableCell>
+                    <TableCell className='min-w-[168px]'>
+                      {formatDateTimeLabel(account.registeredAt)}
+                    </TableCell>
+                    <TableCell className='w-[160px] min-w-[160px]'>
+                      <div className='flex flex-nowrap gap-2'>
+                        {access.canUpdate ? (
                           <Button
                             type='button'
                             variant='outline'
-                            size='icon'
-                            className='size-8 shrink-0 rounded-lg'
-                            onClick={() =>
-                              void handleCopy(account.account, '账号')
-                            }
+                            size='sm'
+                            onClick={() => void openAccountEditor(account)}
                           >
-                            <Copy className='size-4' />
+                            编辑
                           </Button>
-                        </div>
-                      </TableCell>
-                      <TableCell className='min-w-[96px]'>
-                        <Badge variant='outline'>
-                          {getAccountAttributeLabel(account.attribute)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className='min-w-[96px]'>
-                        <Badge variant='outline'>
-                          {getAccountConfidenceLabel(account.confidence)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className='min-w-[108px]'>
-                        <ActionLinkButton
-                          disabled={!canManageNested}
-                          onClick={() => void openAccountSheet('keys', account)}
-                        >
-                          {account.keyCount
-                            ? `详情（${account.keyCount}）`
-                            : '添加'}
-                        </ActionLinkButton>
-                      </TableCell>
-                      <TableCell className='min-w-[120px]'>
-                        <ActionLinkButton
-                          disabled={!canManageNested}
-                          onClick={() =>
-                            void openAccountSheet('bindings', account)
-                          }
-                        >
-                          {account.bindingCount
-                            ? `详情（${account.bindingCount}）`
-                            : '绑定'}
-                        </ActionLinkButton>
-                      </TableCell>
-                      <TableCell className='max-w-xs min-w-[180px]'>
-                        {account.registrationSources.length ? (
-                          <div className='flex flex-wrap gap-2'>
-                            {account.registrationSources.map((source) => (
-                              <ActionLinkButton
-                                key={source.id}
-                                disabled={!canManageNested}
-                                onClick={() =>
-                                  void openAccountSheet('sources', account)
-                                }
-                              >
-                                {source.name}
-                              </ActionLinkButton>
-                            ))}
-                          </div>
-                        ) : (
-                          <ActionLinkButton
-                            disabled={!canManageNested}
+                        ) : null}
+                        {access.canDelete ? (
+                          <Button
+                            type='button'
+                            variant='outline'
+                            size='sm'
                             onClick={() =>
-                              void openAccountSheet('sources', account)
+                              setDeleteTarget({
+                                type: 'account',
+                                ids: [account.id],
+                                label: account.account
+                              })
                             }
                           >
-                            绑定
-                          </ActionLinkButton>
-                        )}
-                      </TableCell>
-                      <TableCell className='min-w-[116px]'>
-                        {account.hasPassword ? '已加密存储' : '未设置'}
-                      </TableCell>
-                      <TableCell className='min-w-[108px]'>
-                        <ActionLinkButton
-                          disabled={!canManageNested}
-                          onClick={() =>
-                            void openAccountSheet('securities', account)
-                          }
-                        >
-                          {account.securityCount
-                            ? `详情（${account.securityCount}）`
-                            : '添加'}
-                        </ActionLinkButton>
-                      </TableCell>
-                      <TableCell className='min-w-[96px]'>
-                        <Badge variant='outline'>
-                          {getAccountStatusLabel(account.status)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className='min-w-[120px]'>
-                        <ActionLinkButton
-                          disabled={!canManageNested}
-                          onClick={() =>
-                            void openAccountSheet('wealth', account)
-                          }
-                        >
-                          {account.wealthEntries.length ? '详情' : '补充信息'}
-                        </ActionLinkButton>
-                      </TableCell>
-                      <TableCell className='min-w-[168px]'>
-                        {formatDateTimeLabel(account.registeredAt)}
-                      </TableCell>
-                      <TableCell className='w-[160px] min-w-[160px]'>
-                        <div className='flex flex-nowrap gap-2'>
-                          {access.canUpdate ? (
-                            <Button
-                              type='button'
-                              variant='outline'
-                              size='sm'
-                              onClick={() => void openAccountEditor(account)}
-                            >
-                              编辑
-                            </Button>
-                          ) : null}
-                          {access.canDelete ? (
-                            <Button
-                              type='button'
-                              variant='outline'
-                              size='sm'
-                              onClick={() =>
-                                setDeleteTarget({
-                                  type: 'account',
-                                  ids: [account.id],
-                                  label: account.account
-                                })
-                              }
-                            >
-                              删除
-                            </Button>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {!accounts.length ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={15}
-                        className='text-muted-foreground py-10 text-center'
-                      >
-                        当前没有匹配的账号记录。
-                      </TableCell>
-                    </TableRow>
-                  ) : null}
-                </TableBody>
-              </Table>
-              <ScrollBar orientation='horizontal' />
-            </ScrollArea>
+                            删除
+                          </Button>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {!accounts.length ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={15}
+                      className='text-muted-foreground py-10 text-center'
+                    >
+                      当前没有匹配的账号记录。
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
           </div>
 
           <div className='mt-4'>
