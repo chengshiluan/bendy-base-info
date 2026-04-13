@@ -595,6 +595,7 @@ export function AccountsManagementClient({
     activeSheet.type !== 'closed' && activeSheet.type !== 'account-editor';
   const wideSheetActive =
     activeSheet.type === 'platforms' ||
+    activeSheet.type === 'bindings' ||
     activeSheet.type === 'sources' ||
     activeSheet.type === 'keys' ||
     activeSheet.type === 'securities' ||
@@ -604,6 +605,10 @@ export function AccountsManagementClient({
   const dialogFieldClassName = 'h-11 rounded-xl px-4';
   const dialogSectionClassName =
     'rounded-2xl border border-border/60 bg-background/40 p-5';
+  const sheetSectionClassName =
+    'rounded-2xl border border-border/60 bg-background/50 p-5 shadow-sm';
+  const sheetMetricCardClassName =
+    'rounded-2xl border border-border/60 bg-muted/15 p-4 shadow-sm';
   const statusTriggerLabel =
     statusFilter === 'all' ? '状态' : getAccountStatusLabel(statusFilter);
   const attributeTriggerLabel =
@@ -1661,6 +1666,10 @@ export function AccountsManagementClient({
             { method: 'DELETE' }
           );
           setSelectedAccountDetail(data.account);
+          if (editingBindingId && deleteTarget.ids.includes(editingBindingId)) {
+            setEditingBindingId(null);
+            setBindingForm(createDefaultBindingForm());
+          }
           toast.success('绑定关系已删除。');
           break;
         }
@@ -2358,229 +2367,387 @@ export function AccountsManagementClient({
         );
       }
 
-      case 'bindings':
+      case 'bindings': {
+        const bindings = selectedAccountDetail?.bindings ?? [];
+        const bindingCount = bindings.length;
+        const accountPlatformLabel =
+          selectedAccountDetail?.platformName || '未绑定主平台';
+
+        const renderBindingFields = (
+          draft: BindingFormState,
+          options: {
+            title: string;
+            description: string;
+            onChange: (nextDraft: BindingFormState) => void;
+            onRemove?: () => void;
+          }
+        ) => (
+          <div className='border-border/60 bg-muted/15 rounded-2xl border p-4 shadow-sm'>
+            <div className='flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between'>
+              <div>
+                <div className='font-medium'>{options.title}</div>
+                <div className='text-muted-foreground mt-1 text-sm'>
+                  {options.description}
+                </div>
+              </div>
+              {options.onRemove ? (
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  className='rounded-xl'
+                  onClick={options.onRemove}
+                >
+                  删除这一行
+                </Button>
+              ) : null}
+            </div>
+
+            <div className='mt-4 grid gap-4 md:grid-cols-[minmax(0,240px)_minmax(0,1fr)]'>
+              <div className='grid gap-2'>
+                <label className='text-sm font-medium'>选择平台</label>
+                <Select
+                  value={draft.platformId || 'none'}
+                  onValueChange={(value) =>
+                    options.onChange({
+                      ...draft,
+                      platformId: value === 'none' ? '' : value
+                    })
+                  }
+                >
+                  <SelectTrigger className={`${dialogFieldClassName} w-full`}>
+                    <SelectValue placeholder='请选择平台' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='none'>请选择平台</SelectItem>
+                    {platforms.map((platform) => (
+                      <SelectItem key={platform.id} value={String(platform.id)}>
+                        {platform.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className='grid gap-2'>
+                <label className='text-sm font-medium'>平台账号</label>
+                <Input
+                  value={draft.platformAccount}
+                  onChange={(event) =>
+                    options.onChange({
+                      ...draft,
+                      platformAccount: event.target.value
+                    })
+                  }
+                  placeholder='请输入平台账号'
+                  className={dialogFieldClassName}
+                />
+              </div>
+            </div>
+          </div>
+        );
+
         return (
           <>
-            <SheetHeader>
+            <SheetHeader className='border-border/60 border-b pb-4'>
               <SheetTitle>绑定信息</SheetTitle>
               <SheetDescription>
-                绑定关系支持一次性新增多条，已有关系可以继续增删改。
+                把当前账号和其他平台账号做映射维护。这里支持查看已有绑定、编辑单条绑定，以及一次性补充多条绑定关系。
               </SheetDescription>
             </SheetHeader>
-            <div className='mt-6 grid gap-6'>
-              <div className='space-y-3'>
-                {selectedAccountDetail?.bindings.map((binding) => (
-                  <div key={binding.id} className='rounded-lg border p-4'>
-                    <div className='flex items-start justify-between gap-3'>
-                      <div className='flex items-center gap-3'>
-                        <PlatformIcon
-                          iconUrl={binding.platformIconUrl}
-                          name={binding.platformName}
-                        />
-                        <div>
-                          <div className='font-medium'>
-                            {binding.platformName || '平台已删除'}
-                          </div>
-                          <div className='text-muted-foreground text-sm'>
-                            平台账号：{binding.platformAccount}
-                          </div>
-                        </div>
+            <div className='flex h-full min-h-0 flex-col px-4 pb-4'>
+              <div className='border-border/60 grid gap-3 border-b py-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,0.7fr))]'>
+                <div className={sheetMetricCardClassName}>
+                  <div className='text-muted-foreground text-xs font-medium'>
+                    当前账号
+                  </div>
+                  <div className='mt-3 flex items-start gap-3'>
+                    <PlatformIcon
+                      iconUrl={selectedAccountDetail?.platformIconUrl}
+                      name={selectedAccountDetail?.platformName}
+                    />
+                    <div className='min-w-0 space-y-1'>
+                      <div className='truncate text-base font-semibold'>
+                        {selectedAccountDetail?.account || '-'}
                       </div>
-                      <div className='flex gap-2'>
-                        {access.canUpdate ? (
-                          <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            onClick={() => beginEditBinding(binding)}
-                          >
-                            编辑
-                          </Button>
-                        ) : null}
-                        {access.canDelete ? (
-                          <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            onClick={() =>
-                              setDeleteTarget({
-                                type: 'binding',
-                                ids: [binding.id],
-                                label: binding.platformAccount
-                              })
-                            }
-                          >
-                            删除
-                          </Button>
-                        ) : null}
+                      <div className='text-muted-foreground truncate text-sm'>
+                        主平台：{accountPlatformLabel}
                       </div>
                     </div>
                   </div>
-                ))}
-                {!selectedAccountDetail?.bindings.length ? (
-                  <div className='text-muted-foreground rounded-lg border border-dashed px-4 py-10 text-center text-sm'>
-                    当前还没有绑定关系。
+                </div>
+                <div className={sheetMetricCardClassName}>
+                  <div className='text-muted-foreground text-xs font-medium'>
+                    已绑定关系
                   </div>
-                ) : null}
+                  <div className='mt-3 text-3xl font-semibold'>
+                    {bindingCount}
+                  </div>
+                </div>
+                <div className={sheetMetricCardClassName}>
+                  <div className='text-muted-foreground text-xs font-medium'>
+                    管理模式
+                  </div>
+                  <div className='mt-3 text-sm font-medium'>
+                    {editingBindingId ? '单条编辑' : '批量新增'}
+                  </div>
+                </div>
+                <div className={sheetMetricCardClassName}>
+                  <div className='text-muted-foreground text-xs font-medium'>
+                    可用平台
+                  </div>
+                  <div className='mt-3 text-3xl font-semibold'>
+                    {platforms.length}
+                  </div>
+                </div>
               </div>
 
-              {canManageNested ? (
-                <form
-                  className='space-y-4 rounded-lg border p-4'
-                  onSubmit={handleBindingSubmit}
-                >
-                  <div className='font-medium'>
-                    {editingBindingId ? '编辑绑定关系' : '新增绑定关系'}
-                  </div>
-                  {editingBindingId ? (
-                    <>
-                      <Select
-                        value={bindingForm.platformId || 'none'}
-                        onValueChange={(value) =>
-                          setBindingForm((current) => ({
-                            ...current,
-                            platformId: value === 'none' ? '' : value
-                          }))
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder='请选择平台' />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value='none'>请选择平台</SelectItem>
-                          {platforms.map((platform) => (
-                            <SelectItem
-                              key={platform.id}
-                              value={String(platform.id)}
-                            >
-                              {platform.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        value={bindingForm.platformAccount}
-                        onChange={(event) =>
-                          setBindingForm((current) => ({
-                            ...current,
-                            platformAccount: event.target.value
-                          }))
-                        }
-                        placeholder='请输入平台账号'
-                      />
-                    </>
-                  ) : (
-                    <div className='space-y-3'>
-                      {bindingDrafts.map((draft, index) => (
-                        <div
-                          key={index}
-                          className='grid gap-3 rounded-md border p-3'
-                        >
-                          <Select
-                            value={draft.platformId || 'none'}
-                            onValueChange={(value) =>
-                              setBindingDrafts((current) =>
-                                current.map((item, itemIndex) =>
-                                  itemIndex === index
-                                    ? {
-                                        ...item,
-                                        platformId:
-                                          value === 'none' ? '' : value
-                                      }
-                                    : item
-                                )
-                              )
-                            }
+              <div className='min-h-0 flex-1 overflow-auto py-4'>
+                <div className='grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(380px,0.8fr)]'>
+                  <section className={sheetSectionClassName}>
+                    <div className='flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between'>
+                      <div>
+                        <div className='text-base font-semibold'>
+                          已绑定列表
+                        </div>
+                        <div className='text-muted-foreground mt-1 text-sm'>
+                          这里展示当前账号已经建立的全部平台绑定关系。
+                        </div>
+                      </div>
+                      <Badge variant='outline'>共 {bindingCount} 条</Badge>
+                    </div>
+
+                    <div className='mt-5 space-y-3'>
+                      {bindings.length ? (
+                        bindings.map((binding) => (
+                          <div
+                            key={binding.id}
+                            className='border-border/60 bg-background/70 rounded-2xl border p-4 shadow-sm'
                           >
-                            <SelectTrigger>
-                              <SelectValue placeholder='请选择平台' />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value='none'>请选择平台</SelectItem>
-                              {platforms.map((platform) => (
-                                <SelectItem
-                                  key={platform.id}
-                                  value={String(platform.id)}
-                                >
-                                  {platform.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Input
-                            value={draft.platformAccount}
-                            onChange={(event) =>
-                              setBindingDrafts((current) =>
-                                current.map((item, itemIndex) =>
-                                  itemIndex === index
-                                    ? {
-                                        ...item,
-                                        platformAccount: event.target.value
-                                      }
-                                    : item
-                                )
-                              )
+                            <div className='flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between'>
+                              <div className='min-w-0 flex-1'>
+                                <div className='flex items-start gap-3'>
+                                  <PlatformIcon
+                                    iconUrl={binding.platformIconUrl}
+                                    name={binding.platformName}
+                                  />
+                                  <div className='min-w-0 flex-1 space-y-2'>
+                                    <div className='flex flex-wrap items-center gap-2'>
+                                      <div className='truncate font-medium'>
+                                        {binding.platformName || '平台已删除'}
+                                      </div>
+                                      <Badge variant='secondary'>已绑定</Badge>
+                                    </div>
+                                    <div className='flex flex-wrap items-center gap-2'>
+                                      <span className='text-muted-foreground text-sm break-all'>
+                                        {binding.platformAccount}
+                                      </span>
+                                      <Button
+                                        type='button'
+                                        variant='ghost'
+                                        size='icon'
+                                        className='size-7 rounded-lg'
+                                        onClick={() =>
+                                          void handleCopy(
+                                            binding.platformAccount,
+                                            '绑定平台账号'
+                                          )
+                                        }
+                                      >
+                                        <Copy className='size-3.5' />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className='mt-4 grid gap-3 md:grid-cols-3'>
+                                  <div className='border-border/60 bg-muted/15 rounded-xl border p-3'>
+                                    <div className='text-muted-foreground text-xs font-medium'>
+                                      创建时间
+                                    </div>
+                                    <div className='mt-1 text-sm font-medium'>
+                                      {formatDateTimeLabel(binding.createdAt)}
+                                    </div>
+                                  </div>
+                                  <div className='border-border/60 bg-muted/15 rounded-xl border p-3'>
+                                    <div className='text-muted-foreground text-xs font-medium'>
+                                      更新时间
+                                    </div>
+                                    <div className='mt-1 text-sm font-medium'>
+                                      {formatDateTimeLabel(binding.updatedAt)}
+                                    </div>
+                                  </div>
+                                  <div className='border-border/60 bg-muted/15 rounded-xl border p-3'>
+                                    <div className='text-muted-foreground text-xs font-medium'>
+                                      平台地址
+                                    </div>
+                                    <div className='mt-1 text-sm font-medium'>
+                                      {binding.platformUrl ? (
+                                        <a
+                                          href={binding.platformUrl}
+                                          target='_blank'
+                                          rel='noreferrer'
+                                          className='text-muted-foreground inline-flex max-w-full items-center gap-1 truncate underline-offset-4 hover:underline'
+                                        >
+                                          <span className='truncate'>
+                                            {binding.platformUrl}
+                                          </span>
+                                          <ExternalLink className='size-4 shrink-0' />
+                                        </a>
+                                      ) : (
+                                        '暂无地址'
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className='flex flex-wrap items-center justify-end gap-2 xl:w-[150px] xl:flex-col xl:items-stretch'>
+                                {access.canUpdate ? (
+                                  <Button
+                                    type='button'
+                                    variant='outline'
+                                    size='sm'
+                                    className='rounded-xl'
+                                    onClick={() => beginEditBinding(binding)}
+                                  >
+                                    编辑
+                                  </Button>
+                                ) : null}
+                                {access.canDelete ? (
+                                  <Button
+                                    type='button'
+                                    variant='outline'
+                                    size='sm'
+                                    className='rounded-xl'
+                                    onClick={() =>
+                                      setDeleteTarget({
+                                        type: 'binding',
+                                        ids: [binding.id],
+                                        label: binding.platformAccount
+                                      })
+                                    }
+                                  >
+                                    删除
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className='text-muted-foreground rounded-2xl border border-dashed px-4 py-14 text-center text-sm'>
+                          当前还没有绑定关系，可以直接在右侧新增第一条。
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  {canManageNested ? (
+                    <section className={sheetSectionClassName}>
+                      <div className='flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between'>
+                        <div>
+                          <div className='text-base font-semibold'>
+                            {editingBindingId ? '编辑绑定关系' : '新增绑定关系'}
+                          </div>
+                          <div className='text-muted-foreground mt-1 text-sm'>
+                            {editingBindingId
+                              ? '正在编辑一条已有绑定，保存后会立即刷新左侧列表。'
+                              : '支持一次补录多条绑定关系，系统会自动跳过未填写完整的空白行。'}
+                          </div>
+                        </div>
+                        {!editingBindingId ? (
+                          <Button
+                            type='button'
+                            variant='outline'
+                            className={toolbarButtonClassName}
+                            onClick={() =>
+                              setBindingDrafts((current) => [
+                                ...current,
+                                createDefaultBindingForm()
+                              ])
                             }
-                            placeholder='请输入平台账号'
-                          />
-                          {bindingDrafts.length > 1 ? (
+                            onMouseUp={(event) => event.currentTarget.blur()}
+                          >
+                            <Plus className='size-4' />
+                            再添加一条
+                          </Button>
+                        ) : null}
+                      </div>
+
+                      <form
+                        className='mt-5 space-y-4'
+                        onSubmit={handleBindingSubmit}
+                      >
+                        {editingBindingId ? (
+                          renderBindingFields(bindingForm, {
+                            title: '当前编辑项',
+                            description:
+                              '修改平台或平台账号后，点击保存修改即可生效。',
+                            onChange: setBindingForm
+                          })
+                        ) : (
+                          <div className='space-y-3'>
+                            {bindingDrafts.map((draft, index) =>
+                              renderBindingFields(draft, {
+                                title: `待新增 #${index + 1}`,
+                                description:
+                                  '请为这一行选择平台并填写对应的平台账号。',
+                                onChange: (nextDraft) =>
+                                  setBindingDrafts((current) =>
+                                    current.map((item, itemIndex) =>
+                                      itemIndex === index ? nextDraft : item
+                                    )
+                                  ),
+                                onRemove:
+                                  bindingDrafts.length > 1
+                                    ? () =>
+                                        setBindingDrafts((current) =>
+                                          current.filter(
+                                            (_, itemIndex) =>
+                                              itemIndex !== index
+                                          )
+                                        )
+                                    : undefined
+                              })
+                            )}
+                          </div>
+                        )}
+
+                        <div className='border-border/60 flex flex-wrap items-center justify-end gap-2 border-t pt-4'>
+                          {editingBindingId ? (
                             <Button
                               type='button'
                               variant='outline'
-                              onClick={() =>
-                                setBindingDrafts((current) =>
-                                  current.filter(
-                                    (_, itemIndex) => itemIndex !== index
-                                  )
-                                )
-                              }
+                              className='rounded-xl'
+                              onClick={() => {
+                                setEditingBindingId(null);
+                                setBindingForm(createDefaultBindingForm());
+                              }}
                             >
-                              删除这一行
+                              取消编辑
                             </Button>
                           ) : null}
+                          <Button
+                            type='submit'
+                            disabled={submitPending}
+                            className='rounded-xl px-5'
+                          >
+                            {submitPending
+                              ? '提交中...'
+                              : editingBindingId
+                                ? '保存修改'
+                                : '批量新增'}
+                          </Button>
                         </div>
-                      ))}
-                      <Button
-                        type='button'
-                        variant='outline'
-                        onClick={() =>
-                          setBindingDrafts((current) => [
-                            ...current,
-                            createDefaultBindingForm()
-                          ])
-                        }
-                      >
-                        <Plus className='mr-1 size-4' />
-                        再添加一条
-                      </Button>
-                    </div>
-                  )}
-                  <div className='flex items-center justify-end gap-2'>
-                    {editingBindingId ? (
-                      <Button
-                        type='button'
-                        variant='outline'
-                        onClick={() => {
-                          setEditingBindingId(null);
-                          setBindingForm(createDefaultBindingForm());
-                        }}
-                      >
-                        取消编辑
-                      </Button>
-                    ) : null}
-                    <Button type='submit' disabled={submitPending}>
-                      {submitPending
-                        ? '提交中...'
-                        : editingBindingId
-                          ? '保存修改'
-                          : '批量新增'}
-                    </Button>
-                  </div>
-                </form>
-              ) : null}
+                      </form>
+                    </section>
+                  ) : null}
+                </div>
+              </div>
             </div>
           </>
         );
+      }
 
       case 'sources': {
         const allSourcesSelected =
