@@ -10,6 +10,14 @@
 
 ## 当前迭代
 
+### 2026-05-04 - 权限管理页重构 v0.2.1
+
+- [x] 后端扩展 `listPermissionsPage` 支持 `permissionType`/`scope`/`origin` 筛选
+- [x] 后端新增 `listPermissionBindings`，并落地 `GET /api/admin/permissions/[id]/bindings`
+- [x] 更新 `GET /api/admin/permissions` 路由支持 `mode=tree|page`
+- [x] 重写 `permissions-management-client.tsx`：紧凑树形视图、`···` DropdownMenu、Sheet 详情抽屉（3 Tab）、全选/批量删除
+- [x] `tsc --noEmit` + `lint` + `build` 验证通过，版本升级至 0.2.1，commit + push
+
 ### 2026-05-04 - 服务器管理模块与 Docker 部署
 
 - [x] 新增 `ops_servers` / `ops_server_facts` schema，并接入默认 bootstrap

@@ -37,6 +37,22 @@
 
 ## 最近开发记录
 
+### 2026-05-04 - 权限管理页重构（0.2.1）
+
+- 完成事项：
+  - 重写 `permissions-management-client.tsx`：紧凑树形视图（每行 h-9，indent 16px/层），悬停显示 `···` DropdownMenu（详情/新增下级/编辑/删除），全选（仅自定义节点）/批量删除，工具栏单行结构（搜索框 + 搜索按钮 + 批量删除 + 新增），行点击弹出 Sheet 详情（基本信息 / 子节点 / 绑定角色 三 Tab），系统内置节点 checkbox 禁用/禁止删除
+  - 后端扩展 `listPermissionsPage` 支持 `permissionType` / `scope` / `origin` 三维筛选
+  - 后端新增 `listPermissionBindings(permissionId, workspaceId)`，查询绑定该权限的角色列表
+  - 更新 `GET /api/admin/permissions` 路由：新增 `mode=page` 扁平分页模式，保留 `mode=tree` 默认树形模式
+  - 新增 `GET /api/admin/permissions/[id]/bindings` 路由，返回 `{ roles: RoleSummary[] }`
+  - 版本升级至 `0.2.1`，同步更新 `package.json` / `src/lib/app-info.ts` / `CHANGELOG.md` / `docs/PLAN.md`
+- 验证：
+  - Node `24.11.0` 下 `npx tsc --noEmit` 通过
+  - Node `24.11.0` 下 `npm run lint` 通过（保留 2 条既有 `react-hooks/incompatible-library` warning）
+  - Node `24.11.0` 下 `npm run build` 通过，`/dashboard/workspaces/permissions` 及新 bindings API 均出现在路由报告
+- 后续待办：
+  - 验证权限页树形视图在真实数据下的 Sheet 绑定角色 Tab 展示效果
+
 ### 2026-05-04 - 服务器管理模块与 Docker 部署（0.2.0）
 
 - 完成事项：

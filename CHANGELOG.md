@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.1 - 2026-05-04
+
+### Changed
+
+- 权限管理页重构为紧凑树形视图：行高压缩、`···` DropdownMenu 悬停操作、支持全选/批量删除自定义节点
+- 新增权限详情 Sheet（基本信息 / 子节点 / 绑定角色 三 Tab）
+- 工具栏统一为单行结构（搜索框 + 搜索按钮 + 批量删除 + 新增）
+- 系统内置节点禁止勾选/删除，仅允许删除自定义节点
+- 后端扩展 `GET /api/admin/permissions` 支持 `mode=page` 扁平分页 + `permissionType`/`scope`/`origin` 筛选
+- 新增 `GET /api/admin/permissions/[id]/bindings` 接口，返回绑定该权限的角色列表
+- 项目版本号升级为 `0.2.1`
+
 ## 0.2.0 - 2026-05-04
 
 ### Added
