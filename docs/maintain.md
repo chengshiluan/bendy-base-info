@@ -37,6 +37,27 @@
 
 ## 最近开发记录
 
+### 2026-05-04 - 服务器管理模块与 Docker 部署（0.2.0）
+
+- 完成事项：
+  - 新增 `ops_servers` / `ops_server_facts` 两张表，统一登记服务器基础信息与历史采集快照（包含 OS / 内核 / CPU / 内存 / 磁盘 / 网络 / 服务 / 运行时间 / 原始输出）
+  - 在 `permissionTreeNodes` 中挂入 `dashboard.ops.servers` 菜单 + `create / update / delete / collect` 动作权限，随默认 bootstrap 一起生效
+  - 新增 `src/lib/server-management` 模块：`types` / `validators` / `crypto`（AES-256-GCM，密钥来自 `AUTH_SECRET`）/ `ssh-client`（ssh2 封装，支持 ed25519/ecdsa/rsa）/ `collector`（并行 `safeExec` 采集 `/etc/os-release`、`/proc/*`、`df -PT`、`ip -j addr`、`systemctl list-units` 等）/ `service` / `mutations` / `dispatcher`（模块级 mutex + semaphore(5)，20s 超时，异步不阻塞主线程）
+  - 新增 `/api/admin/ops/servers` 列表、详情、采集触发、历史查询 4 组接口，严格按 session + permission guard
+  - 新增 `servers-management-client.tsx`：按 `docs/designUI.md` 规范实现工具栏（搜索 / 状态 / 搜索按钮 / 批量删除 / 新增）、表格（全选 / 单选 / 行操作）、新增/编辑弹窗（密码 / 私钥切换、`keepSecret` / `keepPassphrase`）、详情抽屉（`Tabs` 三页签 + 历史按需加载）、3 秒轮询（仅当存在 pending / collecting 行时）、单条与批量 `ConfirmActionDialog`
+  - 为 `Icons` 补 `server: IconServer`，并在 `next.config.ts` 打开 `output: 'standalone'` 与 `serverExternalPackages: ['better-sqlite3', 'ssh2']`
+  - 新增多阶段 `Dockerfile`（`deps` → `builder` → `runner`，基础镜像 `node:24-bookworm-slim`，runner 保留 `libsqlite3-0 / tini / openssh-client / ca-certificates`，以 `nextjs:nodejs(1001:1001)` 非 root 启动，`VOLUME ["/data"]`，SQLite 存到 `/data/local.db`）
+  - 新增 `docker-compose.yml`（`./data:/data`）、`docker/entrypoint.sh`（启动前执行 `drizzle-kit push`）、`.dockerignore`、`scripts/start.sh`、`scripts/start-local.sh`、`docs/deployment-local.md`
+  - 将版本号升级到 `0.2.0`，同步更新 `package.json` / `package-lock.json` / `src/lib/app-info.ts` / `CHANGELOG.md` / `docs/PLAN.md`
+- 验证：
+  - 在 Node `24.11.0` 环境执行 `npx tsc --noEmit`，通过
+  - 在 Node `24.11.0` 环境执行 `npm run lint`，通过；保留 2 条既有 `react-hooks/incompatible-library` warning
+  - 在 Node `24.11.0` 环境执行 `npm run build`，通过；`/dashboard/workspaces/ops/servers` 与 4 组 `/api/admin/ops/servers*` 均出现在路由报告中
+- 后续待办：
+  - 部署后使用具备 `ops.servers.collect` 的账号验证首次采集与 3 秒轮询体验
+  - 如需生产观测，可考虑给 `/api/health` 增加真实实现，让 `docker-compose` healthcheck 做有效探测
+  - 视业务需要补充基于 cron 的定时全量采集，以及对失败服务器的重试退避策略
+
 ### 2026-04-01 - 账号列表批量逻辑删除与表头规范调整
 
 - 完成事项：

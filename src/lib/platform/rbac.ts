@@ -318,6 +318,36 @@ const permissionTreeNodes: PermissionMenuNode[] = [
         ]
       },
       {
+        key: 'servers',
+        title: '服务器管理',
+        route: '/dashboard/workspaces/ops/servers',
+        description: '允许访问运维服务器管理页，登记并采集服务器信息。',
+        scope: 'workspace',
+        icon: 'server',
+        actions: [
+          {
+            key: 'create',
+            title: '新增服务器',
+            description: '允许登记新的服务器并配置 SSH 连接凭据。'
+          },
+          {
+            key: 'update',
+            title: '编辑服务器',
+            description: '允许修改服务器基本信息与连接凭据。'
+          },
+          {
+            key: 'delete',
+            title: '删除服务器',
+            description: '允许删除服务器及其历史采集快照。'
+          },
+          {
+            key: 'collect',
+            title: '采集服务器信息',
+            description: '允许手动触发一次 SSH 采集。'
+          }
+        ]
+      },
+      {
         key: 'system',
         title: '系统管理',
         route: '/dashboard/workspaces/ops/system',

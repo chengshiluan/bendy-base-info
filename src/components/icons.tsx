@@ -19,6 +19,7 @@ import {
   IconMoon,
   IconPhoto,
   IconPlus,
+  IconServer,
   IconSettings,
   IconShield,
   IconSun,
@@ -78,5 +79,6 @@ export const Icons = {
   ticket: IconTicket,
   shield: IconShield,
   key: IconKey,
-  check: IconCheck
+  check: IconCheck,
+  server: IconServer
 };

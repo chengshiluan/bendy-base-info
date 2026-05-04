@@ -10,6 +10,19 @@
 
 ## 当前迭代
 
+### 2026-05-04 - 服务器管理模块与 Docker 部署
+
+- [x] 新增 `ops_servers` / `ops_server_facts` schema，并接入默认 bootstrap
+- [x] 补齐 `permissionTreeNodes` 中 `ops.servers` 菜单 + 动作权限种子
+- [x] 安装 `ssh2` / `@types/ssh2`，封装 SSH 客户端与事实采集器
+- [x] 落地 `src/lib/server-management` 模块：类型、校验、加密、service、mutations、dispatcher
+- [x] 新增 `/api/admin/ops/servers` 系列接口，覆盖列表、详情、采集触发、历史查询
+- [x] 构建 `servers-management-client.tsx`：工具栏 + 表格 + 弹窗 + 抽屉（基础信息 / 最新事实 / 历史）+ 3s 轮询
+- [x] `next.config.ts` 打开 `output: 'standalone'`，声明 `serverExternalPackages`
+- [x] 编写 `Dockerfile` 多阶段、`docker-compose.yml`、`docker/entrypoint.sh`、`scripts/start*.sh`、`.dockerignore`
+- [x] 新增 `docs/deployment-local.md` 部署指引
+- [x] 完成最小验证（`tsc --noEmit` / `lint` / `build`），`git commit + git push origin myloc`
+
 ### 2026-03-28 - 管理工作区权限可绑定修复与版本升级 0.1.9
 
 - [x] 排查角色编辑弹窗里 `管理工作区菜单` 及其动作权限不能勾选的直接原因
