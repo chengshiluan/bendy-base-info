@@ -84,7 +84,8 @@ if (
   providers.push(
     GitHubProvider({
       clientId: env.auth.githubClientId,
-      clientSecret: env.auth.githubClientSecret
+      clientSecret: env.auth.githubClientSecret,
+      httpOptions: { timeout: 30000 }
     })
   );
 }
@@ -121,6 +122,14 @@ export const authOptions: NextAuthOptions = {
       const user =
         (await findUserById(githubUserId)) ??
         (await findUserByGithubUsername(githubUsername));
+
+      console.log('[auth][github] lookup', {
+        githubUserId,
+        githubUsername,
+        found: !!user,
+        userId: user?.id,
+        status: user?.status
+      });
 
       if (!user || user.status !== 'active') {
         return '/auth/sign-in?error=github_not_allowed';

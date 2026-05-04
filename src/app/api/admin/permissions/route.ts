@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireApiPermission } from '@/lib/auth/api-guard';
 import {
   getSearchParam,
+  getPaginationParams,
   handlePlatformError,
   parseJsonRequest
 } from '@/lib/platform/api';
@@ -9,7 +10,8 @@ import { createPermission } from '@/lib/platform/mutations';
 import { actionPermissionCode, menuPermissionCode } from '@/lib/platform/rbac';
 import {
   listPermissionMenuOptions,
-  listPermissionTree
+  listPermissionTree,
+  listPermissionsPage
 } from '@/lib/platform/service';
 import { permissionPayloadSchema } from '@/lib/platform/validators';
 
@@ -22,6 +24,34 @@ export async function GET(request: Request) {
 
   if (response) {
     return response;
+  }
+
+  const mode = getSearchParam(request, 'mode') ?? 'tree';
+
+  if (mode === 'page') {
+    const { page, pageSize } = getPaginationParams(request);
+    const search = getSearchParam(request, 'search');
+    const permissionType = getSearchParam(request, 'permissionType') as
+      | 'menu'
+      | 'action'
+      | undefined;
+    const scope = getSearchParam(request, 'scope') as
+      | 'global'
+      | 'workspace'
+      | undefined;
+    const origin = getSearchParam(request, 'origin') as
+      | 'system'
+      | 'custom'
+      | undefined;
+    const result = await listPermissionsPage({
+      page,
+      pageSize,
+      search,
+      permissionType,
+      scope,
+      origin
+    });
+    return NextResponse.json(result);
   }
 
   const [permissions, menuOptions] = await Promise.all([

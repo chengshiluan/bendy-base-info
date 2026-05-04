@@ -1,17 +1,18 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Search } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  MoreHorizontal,
+  Plus,
+  Trash2
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -20,9 +21,15 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -30,6 +37,14 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle
+} from '@/components/ui/sheet';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import {
   filterPermissionTree,
@@ -37,7 +52,8 @@ import {
 } from '@/lib/platform/permission-tree';
 import type {
   PermissionMenuOption,
-  PermissionTreeNode
+  PermissionTreeNode,
+  RoleSummary
 } from '@/lib/platform/types';
 import { cn } from '@/lib/utils';
 import { ConfirmActionDialog } from './confirm-action-dialog';
@@ -70,7 +86,7 @@ type PermissionFormState = {
 
 function getExpandableCodes(nodes: PermissionTreeNode[]) {
   return flattenPermissionTree(nodes)
-    .filter((node) => node.children.length)
+    .filter((node) => node.children.length > 0)
     .map((node) => node.code);
 }
 
@@ -89,6 +105,25 @@ function createDefaultForm(
   };
 }
 
+function InfoRow({
+  label,
+  value,
+  mono
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className='flex items-start gap-3 text-sm'>
+      <span className='text-muted-foreground w-16 shrink-0'>{label}</span>
+      <span className={cn('flex-1 break-all', mono && 'font-mono text-xs')}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
 export function PermissionsManagementClient({
   initialPermissionTree,
   menuOptions,
@@ -98,19 +133,32 @@ export function PermissionsManagementClient({
   const [permissionTree, setPermissionTree] = useState(initialPermissionTree);
   const [parentMenuOptions, setParentMenuOptions] = useState(menuOptions);
   const [search, setSearch] = useState('');
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [listPending, setListPending] = useState(false);
-  const [submitPending, setSubmitPending] = useState(false);
-  const [deletePending, setDeletePending] = useState(false);
-  const [editingPermission, setEditingPermission] =
-    useState<PermissionTreeNode | null>(null);
-  const [deletingPermission, setDeletingPermission] =
-    useState<PermissionTreeNode | null>(null);
-  const [form, setForm] = useState<PermissionFormState>(createDefaultForm());
+  const [appliedSearch, setAppliedSearch] = useState('');
   const [expandedCodes, setExpandedCodes] = useState<string[]>(() =>
     getExpandableCodes(initialPermissionTree)
   );
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [listPending, setListPending] = useState(false);
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingPermission, setEditingPermission] =
+    useState<PermissionTreeNode | null>(null);
+  const [form, setForm] = useState<PermissionFormState>(createDefaultForm());
+  const [submitPending, setSubmitPending] = useState(false);
+
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletingPermission, setDeletingPermission] =
+    useState<PermissionTreeNode | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
+
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
+  const [batchDeletePending, setBatchDeletePending] = useState(false);
+
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [detailNode, setDetailNode] = useState<PermissionTreeNode | null>(null);
+  const [sheetTab, setSheetTab] = useState('info');
+  const [bindings, setBindings] = useState<RoleSummary[]>([]);
+  const [bindingsPending, setBindingsPending] = useState(false);
 
   useEffect(() => {
     setPermissionTree(initialPermissionTree);
@@ -119,39 +167,63 @@ export function PermissionsManagementClient({
   }, [initialPermissionTree, menuOptions]);
 
   const filteredTree = useMemo(
-    () => filterPermissionTree(permissionTree, search),
-    [permissionTree, search]
+    () => filterPermissionTree(permissionTree, appliedSearch),
+    [permissionTree, appliedSearch]
   );
-  const visibleExpandableCodes = useMemo(
-    () => getExpandableCodes(filteredTree),
+
+  const allVisibleNodes = useMemo(
+    () => flattenPermissionTree(filteredTree),
     [filteredTree]
   );
+
   const expandedSet = useMemo(() => new Set(expandedCodes), [expandedCodes]);
+
   const selectedParent = useMemo(
-    () => parentMenuOptions.find((option) => option.value === form.parentCode),
+    () => parentMenuOptions.find((opt) => opt.value === form.parentCode),
     [form.parentCode, parentMenuOptions]
   );
 
-  async function refreshPermissions() {
-    if (!workspaceId) {
-      return;
+  const deletableNodeIds = useMemo(
+    () => new Set(allVisibleNodes.filter((n) => !n.isSystem).map((n) => n.id)),
+    [allVisibleNodes]
+  );
+
+  const allDeletableSelected = useMemo(
+    () =>
+      deletableNodeIds.size > 0 &&
+      Array.from(deletableNodeIds).every((id) => selectedIds.has(id)),
+    [deletableNodeIds, selectedIds]
+  );
+
+  function toggleSelectAll() {
+    if (allDeletableSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(deletableNodeIds));
     }
+  }
 
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function refreshPermissions() {
+    if (!workspaceId) return;
     setListPending(true);
-
     try {
       const data = await requestJson<{
         permissions: PermissionTreeNode[];
         menuOptions: PermissionMenuOption[];
-      }>(
-        buildPathWithQuery('/api/admin/permissions', {
-          workspaceId
-        })
-      );
-
+      }>(buildPathWithQuery('/api/admin/permissions', { workspaceId }));
       setPermissionTree(data.permissions);
       setParentMenuOptions(data.menuOptions);
       setExpandedCodes(getExpandableCodes(data.permissions));
+      setSelectedIds(new Set());
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
@@ -163,65 +235,72 @@ export function PermissionsManagementClient({
     parentCode = '',
     permissionType: PermissionFormState['permissionType'] = 'action'
   ) {
-    if (!access.canCreate) {
-      return;
-    }
-
+    if (!access.canCreate) return;
     setEditingPermission(null);
     setForm(createDefaultForm(parentCode, permissionType));
     setDialogOpen(true);
   }
 
-  function openEditDialog(permission: PermissionTreeNode) {
-    if (!access.canUpdate || permission.isSystem) {
-      return;
-    }
-
-    setEditingPermission(permission);
+  function openEditDialog(node: PermissionTreeNode) {
+    if (!access.canUpdate || node.isSystem) return;
+    setEditingPermission(node);
     setForm({
-      name: permission.name,
-      code: permission.code,
-      permissionType: permission.permissionType,
-      parentCode: permission.parentCode ?? '',
-      route: permission.route ?? '',
-      sortOrder: permission.sortOrder,
-      description: permission.description ?? ''
+      name: node.name,
+      code: node.code,
+      permissionType: node.permissionType,
+      parentCode: node.parentCode ?? '',
+      route: node.route ?? '',
+      sortOrder: node.sortOrder,
+      description: node.description ?? ''
     });
     setDialogOpen(true);
   }
 
+  function openDetailSheet(node: PermissionTreeNode) {
+    setDetailNode(node);
+    setSheetTab('info');
+    setBindings([]);
+    setSheetOpen(true);
+  }
+
+  async function loadBindings(node: PermissionTreeNode) {
+    if (!workspaceId) return;
+    setBindingsPending(true);
+    try {
+      const data = await requestJson<{ roles: RoleSummary[] }>(
+        buildPathWithQuery(`/api/admin/permissions/${node.id}/bindings`, {
+          workspaceId
+        })
+      );
+      setBindings(data.roles);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setBindingsPending(false);
+    }
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
     if (!workspaceId) {
       toast.error('当前没有可操作的工作区。');
       return;
     }
-
     setSubmitPending(true);
-
     try {
-      const payload = {
-        ...form
-      };
-
       if (editingPermission) {
         await requestJson(
           `/api/admin/permissions/${editingPermission.id}?workspaceId=${workspaceId}`,
-          {
-            method: 'PUT',
-            body: JSON.stringify(payload)
-          }
+          { method: 'PUT', body: JSON.stringify(form) }
         );
         toast.success('权限节点已更新。');
       } else {
         await requestJson(`/api/admin/permissions?workspaceId=${workspaceId}`, {
           method: 'POST',
-          body: JSON.stringify(payload)
+          body: JSON.stringify(form)
         });
         toast.success('权限节点已创建。');
       }
-
       await refreshPermissions();
       setDialogOpen(false);
       setEditingPermission(null);
@@ -234,20 +313,18 @@ export function PermissionsManagementClient({
   }
 
   async function handleDelete() {
-    if (!deletingPermission || !workspaceId) {
-      return;
-    }
-
+    if (!deletingPermission || !workspaceId) return;
     setDeletePending(true);
-
     try {
       await requestJson(
         `/api/admin/permissions/${deletingPermission.id}?workspaceId=${workspaceId}`,
-        {
-          method: 'DELETE'
-        }
+        { method: 'DELETE' }
       );
       toast.success('权限节点已删除。');
+      if (detailNode?.id === deletingPermission.id) {
+        setSheetOpen(false);
+        setDetailNode(null);
+      }
       await refreshPermissions();
       setDeleteOpen(false);
       setDeletingPermission(null);
@@ -258,216 +335,365 @@ export function PermissionsManagementClient({
     }
   }
 
+  async function handleBatchDelete() {
+    if (!workspaceId || selectedIds.size === 0) return;
+    setBatchDeletePending(true);
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) =>
+          requestJson(
+            `/api/admin/permissions/${id}?workspaceId=${workspaceId}`,
+            { method: 'DELETE' }
+          )
+        )
+      );
+      toast.success(`已删除 ${selectedIds.size} 个自定义权限节点。`);
+      await refreshPermissions();
+      setBatchDeleteOpen(false);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setBatchDeletePending(false);
+    }
+  }
+
   if (!workspaceId) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>权限树</CardTitle>
-          <CardDescription>
-            请先选择一个工作区，再查看当前系统的功能权限树。
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <div className='text-muted-foreground rounded-lg border border-dashed p-12 text-center text-sm'>
+        请先选择一个工作区，再查看当前系统的功能权限树。
+      </div>
     );
   }
 
-  const canManageAny = access.canUpdate || access.canDelete || access.canCreate;
-
-  const toggleExpanded = (code: string) => {
-    setExpandedCodes((current) =>
-      current.includes(code)
-        ? current.filter((item) => item !== code)
-        : [...current, code]
-    );
-  };
-
-  const renderNode = (node: PermissionTreeNode, depth = 0) => {
+  function renderNode(node: PermissionTreeNode, depth = 0): React.ReactNode {
     const hasChildren = node.children.length > 0;
-    const isExpanded = search ? true : expandedSet.has(node.code);
+    const isExpanded = appliedSearch ? true : expandedSet.has(node.code);
+    const isSelected = selectedIds.has(node.id);
+    const canDelete = !node.isSystem && access.canDelete;
 
     return (
-      <div key={node.id} className='space-y-2'>
+      <div key={node.id}>
         <div
           className={cn(
-            'hover:bg-muted/40 grid gap-3 rounded-lg border px-3 py-3 lg:grid-cols-[minmax(320px,1.5fr)_minmax(220px,1fr)_minmax(160px,0.7fr)_minmax(220px,1fr)_auto]',
-            node.isSystem && 'bg-muted/20'
+            'group flex h-9 items-center gap-1.5 rounded px-2 text-sm transition-colors hover:bg-muted/50',
+            node.isSystem && 'opacity-70'
           )}
-          style={{ marginLeft: depth * 18 }}
+          style={{ paddingLeft: `${depth * 16 + 8}px` }}
         >
-          <div className='flex min-w-0 items-start gap-3'>
-            <button
-              type='button'
-              className='text-muted-foreground mt-0.5 flex size-5 items-center justify-center'
-              onClick={() => {
-                if (hasChildren) {
-                  toggleExpanded(node.code);
-                }
-              }}
-            >
-              {hasChildren ? (
-                isExpanded ? (
-                  <ChevronDown className='size-4' />
-                ) : (
-                  <ChevronRight className='size-4' />
-                )
-              ) : null}
-            </button>
-            <div className='min-w-0 space-y-1'>
-              <div className='flex flex-wrap items-center gap-2'>
-                <span className='font-medium'>{node.name}</span>
-                <Badge variant='outline'>
-                  {node.permissionType === 'menu' ? '菜单' : '按钮'}
-                </Badge>
-                {node.isSystem ? (
-                  <Badge variant='secondary'>系统内置</Badge>
-                ) : null}
-              </div>
-              <div className='text-muted-foreground text-xs'>
-                {node.pathLabel}
-              </div>
-              <div className='text-muted-foreground text-xs break-all'>
-                {node.code}
-              </div>
-            </div>
-          </div>
+          <button
+            type='button'
+            className='text-muted-foreground flex size-4 shrink-0 items-center justify-center'
+            onClick={() => {
+              if (hasChildren) {
+                setExpandedCodes((prev) =>
+                  prev.includes(node.code)
+                    ? prev.filter((c) => c !== node.code)
+                    : [...prev, node.code]
+                );
+              }
+            }}
+            tabIndex={-1}
+          >
+            {hasChildren ? (
+              isExpanded ? (
+                <ChevronDown className='size-3.5' />
+              ) : (
+                <ChevronRight className='size-3.5' />
+              )
+            ) : (
+              <span className='bg-muted-foreground/30 mx-auto block size-1 rounded-full' />
+            )}
+          </button>
 
-          <div className='space-y-1 text-sm'>
-            <div className='font-medium'>路由</div>
-            <div className='text-muted-foreground break-all'>
-              {node.route || '按钮继承上级菜单路由'}
-            </div>
-          </div>
+          <Checkbox
+            className='shrink-0'
+            checked={isSelected}
+            disabled={!canDelete}
+            onCheckedChange={() => {
+              if (canDelete) toggleSelect(node.id);
+            }}
+          />
 
-          <div className='space-y-1 text-sm'>
-            <div className='font-medium'>排序 / 范围</div>
-            <div className='text-muted-foreground flex flex-wrap items-center gap-2'>
-              <span>{node.sortOrder}</span>
-              <Badge variant='outline'>
-                {node.scope === 'workspace' ? '工作区' : '全局'}
+          <button
+            type='button'
+            className='flex min-w-0 flex-1 items-center gap-2 text-left'
+            onClick={() => openDetailSheet(node)}
+          >
+            <span className='truncate font-medium'>{node.name}</span>
+            <Badge variant='outline' className='shrink-0 px-1.5 py-0 text-[10px]'>
+              {node.permissionType === 'menu' ? '菜单' : '按钮'}
+            </Badge>
+            {node.isSystem ? (
+              <Badge
+                variant='secondary'
+                className='shrink-0 px-1.5 py-0 text-[10px]'
+              >
+                内置
               </Badge>
-            </div>
-          </div>
+            ) : null}
+            <span className='text-muted-foreground ml-1 truncate text-xs'>
+              {node.code}
+            </span>
+          </button>
 
-          <div className='space-y-1 text-sm'>
-            <div className='font-medium'>说明</div>
-            <div className='text-muted-foreground whitespace-pre-wrap'>
-              {node.description || '未填写说明'}
-            </div>
-          </div>
-
-          {canManageAny ? (
-            <div className='flex flex-wrap items-start justify-end gap-2'>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant='ghost'
+                size='icon'
+                className='size-6 shrink-0 opacity-0 transition-opacity group-hover:opacity-100'
+                tabIndex={-1}
+              >
+                <MoreHorizontal className='size-3.5' />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end'>
+              <DropdownMenuItem onClick={() => openDetailSheet(node)}>
+                详情
+              </DropdownMenuItem>
               {access.canCreate &&
               node.permissionType === 'menu' &&
-              node.scope === 'workspace' &&
               !node.isVirtual ? (
-                <Button
-                  type='button'
-                  variant='outline'
-                  size='sm'
+                <DropdownMenuItem
                   onClick={() => openCreateDialog(node.code, 'action')}
                 >
                   新增下级
-                </Button>
+                </DropdownMenuItem>
               ) : null}
               {access.canUpdate && !node.isSystem ? (
-                <Button
-                  type='button'
-                  variant='outline'
-                  size='sm'
-                  onClick={() => openEditDialog(node)}
-                >
+                <DropdownMenuItem onClick={() => openEditDialog(node)}>
                   编辑
-                </Button>
+                </DropdownMenuItem>
               ) : null}
               {access.canDelete && !node.isSystem ? (
-                <Button
-                  type='button'
-                  variant='outline'
-                  size='sm'
-                  onClick={() => {
-                    setDeletingPermission(node);
-                    setDeleteOpen(true);
-                  }}
-                >
-                  删除
-                </Button>
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className='text-destructive focus:text-destructive'
+                    onClick={() => {
+                      setDeletingPermission(node);
+                      setDeleteOpen(true);
+                    }}
+                  >
+                    删除
+                  </DropdownMenuItem>
+                </>
               ) : null}
-            </div>
-          ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {hasChildren && isExpanded ? (
-          <div className='space-y-2'>
+          <div>
             {node.children.map((child) => renderNode(child, depth + 1))}
           </div>
         ) : null}
       </div>
     );
-  };
+  }
 
   return (
     <>
-      <Card>
-        <CardHeader className='flex flex-col gap-4 md:flex-row md:items-center md:justify-between'>
-          <div>
-            <CardTitle>权限树</CardTitle>
-            <CardDescription>
-              权限树就是系统的功能目录树。每一级菜单都落在权限表中，最小节点对应当前路由下的按钮权限。
-            </CardDescription>
-          </div>
-          <div className='flex w-full flex-col gap-3 md:w-auto md:flex-row'>
-            <div className='relative md:w-80'>
-              <Search className='text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2' />
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder='搜索菜单名、权限编码、路由'
-                className='pl-9'
-              />
-            </div>
-            <Button
-              type='button'
-              variant='outline'
-              onClick={() => setExpandedCodes(visibleExpandableCodes)}
-            >
-              全部展开
-            </Button>
-            <Button
-              type='button'
-              variant='outline'
-              onClick={() => setExpandedCodes([])}
-              disabled={Boolean(search)}
-            >
-              全部收起
-            </Button>
-            {access.canCreate ? (
-              <Button type='button' onClick={() => openCreateDialog()}>
-                新增权限
-              </Button>
-            ) : null}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <ScrollArea className='h-[720px] rounded-md border'>
-            <div className='space-y-3 p-3'>
-              {filteredTree.length ? (
-                filteredTree.map((node) => renderNode(node))
-              ) : (
-                <div className='text-muted-foreground py-12 text-center text-sm'>
-                  当前没有匹配的权限节点。
-                </div>
-              )}
-            </div>
-          </ScrollArea>
-          {listPending ? (
-            <div className='text-muted-foreground mt-3 text-sm'>
-              刷新权限树中...
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+      {/* toolbar */}
+      <div className='mb-4 flex items-center gap-2'>
+        <div className='flex flex-1 items-center gap-2'>
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') setAppliedSearch(search);
+            }}
+            placeholder='搜索名称、编码、路由'
+            className='h-10 max-w-64'
+          />
+          <Button
+            type='button'
+            variant='outline'
+            className='h-10'
+            onClick={() => setAppliedSearch(search)}
+          >
+            搜索
+          </Button>
+        </div>
 
+        {selectedIds.size > 0 && access.canDelete ? (
+          <Button
+            type='button'
+            variant='destructive'
+            className='h-10 gap-1.5'
+            onClick={() => setBatchDeleteOpen(true)}
+          >
+            <Trash2 className='size-4' />
+            删除（{selectedIds.size}）
+          </Button>
+        ) : null}
+
+        {access.canCreate ? (
+          <Button
+            type='button'
+            className='h-10 gap-1.5'
+            onClick={() => openCreateDialog()}
+            disabled={listPending}
+          >
+            {listPending ? (
+              <Loader2 className='size-4 animate-spin' />
+            ) : (
+              <Plus className='size-4' />
+            )}
+            新增
+          </Button>
+        ) : null}
+      </div>
+
+      {/* tree header row */}
+      <div className='mb-1 flex h-8 items-center gap-1.5 px-2'>
+        <span className='flex size-4 shrink-0 items-center justify-center'>
+          <Checkbox
+            className='size-3.5'
+            checked={allDeletableSelected}
+            disabled={deletableNodeIds.size === 0}
+            onCheckedChange={toggleSelectAll}
+          />
+        </span>
+        <span className='text-muted-foreground ml-1.5 text-xs'>权限节点</span>
+      </div>
+
+      {/* tree body */}
+      <div className='rounded-md border'>
+        {filteredTree.length > 0 ? (
+          <div className='py-1'>
+            {filteredTree.map((node) => renderNode(node))}
+          </div>
+        ) : (
+          <div className='text-muted-foreground py-12 text-center text-sm'>
+            暂无数据
+          </div>
+        )}
+      </div>
+
+      {/* detail sheet */}
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent className='min-w-[460px]'>
+          <SheetHeader>
+            <SheetTitle>{detailNode?.name ?? '权限详情'}</SheetTitle>
+            <SheetDescription className='break-all font-mono text-xs'>
+              {detailNode?.code}
+            </SheetDescription>
+          </SheetHeader>
+
+          {detailNode ? (
+            <Tabs
+              value={sheetTab}
+              onValueChange={(v) => {
+                setSheetTab(v);
+                if (v === 'bindings' && bindings.length === 0 && !bindingsPending) {
+                  void loadBindings(detailNode);
+                }
+              }}
+              className='mt-4'
+            >
+              <TabsList>
+                <TabsTrigger value='info'>基本信息</TabsTrigger>
+                <TabsTrigger value='children'>子节点</TabsTrigger>
+                <TabsTrigger value='bindings'>绑定角色</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value='info' className='mt-4 space-y-3'>
+                <InfoRow label='名称' value={detailNode.name} />
+                <InfoRow label='编码' value={detailNode.code} mono />
+                <InfoRow
+                  label='类型'
+                  value={detailNode.permissionType === 'menu' ? '菜单' : '按钮'}
+                />
+                <InfoRow
+                  label='范围'
+                  value={detailNode.scope === 'workspace' ? '工作区' : '全局'}
+                />
+                <InfoRow
+                  label='路由'
+                  value={detailNode.route ?? '继承上级菜单路由'}
+                  mono
+                />
+                <InfoRow label='排序' value={String(detailNode.sortOrder)} />
+                <InfoRow
+                  label='来源'
+                  value={detailNode.isSystem ? '系统内置' : '自定义'}
+                />
+                <InfoRow
+                  label='说明'
+                  value={detailNode.description ?? '未填写说明'}
+                />
+              </TabsContent>
+
+              <TabsContent value='children' className='mt-4'>
+                {detailNode.children.length === 0 ? (
+                  <div className='text-muted-foreground py-8 text-center text-sm'>
+                    暂无子节点
+                  </div>
+                ) : (
+                  <div className='space-y-0.5'>
+                    {detailNode.children.map((child) => (
+                      <div
+                        key={child.id}
+                        className='hover:bg-muted/40 flex items-center gap-2 rounded px-2 py-1.5 text-sm'
+                      >
+                        <Badge
+                          variant='outline'
+                          className='shrink-0 px-1.5 py-0 text-[10px]'
+                        >
+                          {child.permissionType === 'menu' ? '菜单' : '按钮'}
+                        </Badge>
+                        <span className='flex-1 truncate font-medium'>
+                          {child.name}
+                        </span>
+                        <span className='text-muted-foreground truncate font-mono text-xs'>
+                          {child.code}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value='bindings' className='mt-4'>
+                {bindingsPending ? (
+                  <div className='flex items-center justify-center py-8'>
+                    <Loader2 className='text-muted-foreground size-5 animate-spin' />
+                  </div>
+                ) : bindings.length === 0 ? (
+                  <div className='text-muted-foreground py-8 text-center text-sm'>
+                    暂无已绑定的角色
+                  </div>
+                ) : (
+                  <div className='space-y-0.5'>
+                    {bindings.map((role) => (
+                      <div
+                        key={role.id}
+                        className='hover:bg-muted/40 flex items-center gap-2 rounded px-2 py-1.5 text-sm'
+                      >
+                        <span className='flex-1 font-medium'>{role.name}</span>
+                        {role.isSystem ? (
+                          <Badge
+                            variant='secondary'
+                            className='shrink-0 px-1.5 py-0 text-[10px]'
+                          >
+                            内置
+                          </Badge>
+                        ) : null}
+                        <span className='text-muted-foreground font-mono text-xs'>
+                          {role.key}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          ) : null}
+        </SheetContent>
+      </Sheet>
+
+      {/* create / edit dialog */}
       {access.canCreate || access.canUpdate ? (
         <Dialog
           open={dialogOpen}
@@ -479,28 +705,28 @@ export function PermissionsManagementClient({
             }
           }}
         >
-          <DialogContent className='max-w-3xl'>
+          <DialogContent className='max-w-2xl'>
             <DialogHeader>
               <DialogTitle>
                 {editingPermission ? '编辑权限节点' : '新增权限节点'}
               </DialogTitle>
               <DialogDescription>
-                权限节点必须挂在一个上级菜单下。菜单节点控制目录和路由，按钮节点控制当前页面下的最小功能权限。
+                菜单节点控制目录和路由，按钮节点控制最小功能权限。
               </DialogDescription>
             </DialogHeader>
+
             <form className='space-y-4' onSubmit={handleSubmit}>
               <div className='grid gap-2'>
                 <label className='text-sm font-medium'>权限类型</label>
                 <RadioGroup
                   value={form.permissionType}
                   onValueChange={(value) =>
-                    setForm((current) => ({
-                      ...current,
-                      permissionType:
-                        value as PermissionFormState['permissionType']
+                    setForm((prev) => ({
+                      ...prev,
+                      permissionType: value as PermissionFormState['permissionType']
                     }))
                   }
-                  className='flex flex-wrap gap-6'
+                  className='flex gap-6'
                 >
                   <label className='flex items-center gap-2 text-sm'>
                     <RadioGroupItem value='menu' />
@@ -518,17 +744,15 @@ export function PermissionsManagementClient({
                   <label className='text-sm font-medium'>权限名称</label>
                   <Input
                     value={form.name}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        name: event.target.value
-                      }))
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, name: e.target.value }))
                     }
                     placeholder={
                       form.permissionType === 'menu'
                         ? '例如 客户管理'
                         : '例如 导出客户'
                     }
+                    className='rounded-xl px-4'
                     required
                   />
                 </div>
@@ -537,16 +761,16 @@ export function PermissionsManagementClient({
                   <Select
                     value={form.parentCode || undefined}
                     onValueChange={(value) =>
-                      setForm((current) => ({ ...current, parentCode: value }))
+                      setForm((prev) => ({ ...prev, parentCode: value }))
                     }
                   >
-                    <SelectTrigger className='w-full'>
+                    <SelectTrigger className='w-full rounded-xl'>
                       <SelectValue placeholder='请选择上级菜单' />
                     </SelectTrigger>
                     <SelectContent>
-                      {parentMenuOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
+                      {parentMenuOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -559,17 +783,15 @@ export function PermissionsManagementClient({
                   <label className='text-sm font-medium'>权限编码</label>
                   <Input
                     value={form.code}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        code: event.target.value
-                      }))
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, code: e.target.value }))
                     }
                     placeholder={
                       form.permissionType === 'menu'
                         ? '例如 dashboard.workspaces.customers.menu'
                         : '例如 dashboard.workspaces.customers.export'
                     }
+                    className='rounded-xl px-4'
                     required
                   />
                 </div>
@@ -579,12 +801,13 @@ export function PermissionsManagementClient({
                     type='number'
                     min={0}
                     value={form.sortOrder}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        sortOrder: Number(event.target.value || 0)
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        sortOrder: Number(e.target.value || 0)
                       }))
                     }
+                    className='rounded-xl px-4'
                   />
                 </div>
               </div>
@@ -594,21 +817,19 @@ export function PermissionsManagementClient({
                   <label className='text-sm font-medium'>路由</label>
                   <Input
                     value={form.route}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        route: event.target.value
-                      }))
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, route: e.target.value }))
                     }
                     placeholder='例如 /dashboard/workspaces/customers'
+                    className='rounded-xl px-4'
                     required
                   />
                 </div>
               ) : (
-                <div className='text-muted-foreground rounded-md border border-dashed px-3 py-2 text-sm'>
-                  按钮权限会继承上级菜单路由：
+                <div className='text-muted-foreground rounded-xl border border-dashed px-4 py-2 text-sm'>
+                  按钮权限继承上级菜单路由：
                   <span className='ml-1 font-medium'>
-                    {selectedParent?.route || '请先选择上级菜单'}
+                    {selectedParent?.route ?? '请先选择上级菜单'}
                   </span>
                 </div>
               )}
@@ -617,17 +838,18 @@ export function PermissionsManagementClient({
                 <label className='text-sm font-medium'>说明</label>
                 <Textarea
                   value={form.description}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      description: event.target.value
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      description: e.target.value
                     }))
                   }
                   placeholder='说明这个权限节点在页面上控制什么功能'
+                  className='rounded-2xl px-4 py-3'
                 />
               </div>
 
-              <DialogFooter>
+              <DialogFooter className='border-t pt-4'>
                 <Button
                   type='button'
                   variant='outline'
@@ -648,6 +870,7 @@ export function PermissionsManagementClient({
         </Dialog>
       ) : null}
 
+      {/* single delete */}
       {access.canDelete ? (
         <ConfirmActionDialog
           open={deleteOpen}
@@ -655,12 +878,25 @@ export function PermissionsManagementClient({
           title='删除权限节点'
           description={
             deletingPermission
-              ? `将删除权限 ${deletingPermission.code} 以及它下面的自定义子节点，相关角色绑定也会一并清理。`
+              ? `将删除权限 ${deletingPermission.code} 以及其下自定义子节点，相关角色绑定也会一并清理。`
               : '删除后不可恢复。'
           }
           confirmLabel='确认删除'
           pending={deletePending}
           onConfirm={handleDelete}
+        />
+      ) : null}
+
+      {/* batch delete */}
+      {access.canDelete ? (
+        <ConfirmActionDialog
+          open={batchDeleteOpen}
+          onOpenChange={setBatchDeleteOpen}
+          title='批量删除权限节点'
+          description={`将删除已选中的 ${selectedIds.size} 个自定义权限节点，相关角色绑定也会一并清理。`}
+          confirmLabel='确认删除'
+          pending={batchDeletePending}
+          onConfirm={handleBatchDelete}
         />
       ) : null}
     </>

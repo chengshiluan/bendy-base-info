@@ -30,9 +30,11 @@ if (process.env.S3_PUBLIC_BASE_URL) {
 }
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   images: {
     remotePatterns
-  }
+  },
+  serverExternalPackages: ['better-sqlite3', 'ssh2']
 };
 
 export default nextConfig;

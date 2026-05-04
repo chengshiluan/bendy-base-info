@@ -2070,9 +2070,14 @@ export function AccountsManagementClient({
   function renderSheetContent() {
     if (sheetPending) {
       return (
-        <div className='flex h-full items-center justify-center py-12'>
-          <Loader2 className='text-muted-foreground size-5 animate-spin' />
-        </div>
+        <>
+          <SheetHeader className='sr-only'>
+            <SheetTitle>加载中</SheetTitle>
+          </SheetHeader>
+          <div className='flex h-full items-center justify-center py-12'>
+            <Loader2 className='text-muted-foreground size-5 animate-spin' />
+          </div>
+        </>
       );
     }
 

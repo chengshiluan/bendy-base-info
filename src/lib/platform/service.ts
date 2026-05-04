@@ -857,22 +857,75 @@ export async function listPermissions(): Promise<PermissionSummary[]> {
     });
 }
 
+type PermissionPageQuery = SearchPageQuery & {
+  permissionType?: 'menu' | 'action';
+  scope?: 'global' | 'workspace';
+  origin?: 'system' | 'custom';
+};
+
 export async function listPermissionsPage(
-  query: SearchPageQuery = {}
+  query: PermissionPageQuery = {}
 ): Promise<PaginatedResult<PermissionSummary>> {
   const permissions = await listPermissions();
   const keyword = normalizeKeyword(query.search);
-  const filtered = permissions.filter((permission) =>
-    matchesKeyword(keyword, [
-      permission.name,
-      permission.code,
-      permission.pathLabel,
-      permission.module,
-      permission.action
-    ])
-  );
+  const filtered = permissions.filter((permission) => {
+    if (
+      !matchesKeyword(keyword, [
+        permission.name,
+        permission.code,
+        permission.pathLabel,
+        permission.module,
+        permission.action
+      ])
+    )
+      return false;
+    if (query.permissionType && permission.permissionType !== query.permissionType)
+      return false;
+    if (query.scope && permission.scope !== query.scope) return false;
+    if (query.origin === 'system' && !permission.isSystem) return false;
+    if (query.origin === 'custom' && permission.isSystem) return false;
+    return true;
+  });
 
   return paginateItems(filtered, query.page, query.pageSize);
+}
+
+export async function listPermissionBindings(
+  permissionId: string,
+  workspaceId: string
+): Promise<RoleSummary[]> {
+  if (!db) return [];
+
+  const database = db;
+  const rows = await database
+    .select({
+      id: schema.roles.id,
+      workspaceId: schema.roles.workspaceId,
+      key: schema.roles.key,
+      name: schema.roles.name,
+      description: schema.roles.description,
+      isSystem: schema.roles.isSystem
+    })
+    .from(schema.roles)
+    .innerJoin(
+      schema.rolePermissions,
+      eq(schema.rolePermissions.roleId, schema.roles.id)
+    )
+    .where(
+      and(
+        eq(schema.rolePermissions.permissionId, permissionId),
+        eq(schema.roles.workspaceId, workspaceId)
+      )
+    )
+    .orderBy(asc(schema.roles.name));
+
+  return rows.map((role) => ({
+    ...role,
+    description: role.description ?? '未填写角色描述。',
+    permissionCount: 0,
+    permissionIds: [],
+    isSystem: role.isSystem
+  }));
 }
 
 export async function listAdminNotifications(

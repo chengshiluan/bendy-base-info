@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.2.1 - 2026-05-04
+
+### Changed
+
+- 权限管理页重构为紧凑树形视图：行高压缩、`···` DropdownMenu 悬停操作、支持全选/批量删除自定义节点
+- 新增权限详情 Sheet（基本信息 / 子节点 / 绑定角色 三 Tab）
+- 工具栏统一为单行结构（搜索框 + 搜索按钮 + 批量删除 + 新增）
+- 系统内置节点禁止勾选/删除，仅允许删除自定义节点
+- 后端扩展 `GET /api/admin/permissions` 支持 `mode=page` 扁平分页 + `permissionType`/`scope`/`origin` 筛选
+- 新增 `GET /api/admin/permissions/[id]/bindings` 接口，返回绑定该权限的角色列表
+- 项目版本号升级为 `0.2.1`
+
+## 0.2.0 - 2026-05-04
+
+### Added
+
+- 运维菜单新增“服务器管理”模块：支持在工作区下登记服务器、SSH 凭据加密存储、首次保存自动采集，并通过 3 秒轮询刷新状态
+- 服务器详情抽屉支持 基本信息 / 最新事实 / 历史快照 三个 Tab，覆盖 OS、内核、CPU、内存、磁盘、网络、服务与运行时信息
+- 新增 `/api/admin/ops/servers`、`/api/admin/ops/servers/[id]`、`/api/admin/ops/servers/[id]/collect`、`/api/admin/ops/servers/[id]/facts` 四组管理接口
+- 新增 `ops_servers` / `ops_server_facts` 两张表，以及 `ops.servers` 菜单与 `create / update / delete / collect` 动作权限
+- 新增多阶段 `Dockerfile`、`docker-compose.yml`、`docker/entrypoint.sh`、`scripts/start.sh`、`scripts/start-local.sh`、`.dockerignore`，以及 `docs/deployment-local.md` 部署指引
+- `next.config.ts` 打开 `output: 'standalone'` 并声明 `serverExternalPackages: ['better-sqlite3', 'ssh2']`，支持最小化容器化部署
+
+### Changed
+
+- 项目版本号统一升级为 `0.2.0`
+
 ## 0.1.9 - 2026-03-28
 
 ### Fixed
