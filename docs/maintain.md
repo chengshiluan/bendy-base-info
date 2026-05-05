@@ -37,6 +37,23 @@
 
 ## 最近开发记录
 
+### 2026-05-05 - 权限详情抽屉视觉优化（Apple 美学）
+
+- 完成事项：
+  - 重构 `permissions-management-client.tsx` 中权限详情 Sheet 抽屉的视觉层：
+    - 抽屉宽度收紧至 `min-w-[480px] sm:max-w-lg`，整体使用 `p-0` 自控内边距
+    - Header 区 `px-6 py-5`，标题与 code badge 横排，右上角汇聚「系统内置」/「菜单/按钮」两个 Badge
+    - Tabs 切换栏改为 underline 风格（`border-b-2 border-foreground active`），横向 `px-6`，去掉 pill 背景
+    - 「基本信息」Tab 内容拆为「标识」/「配置」两个分组，分组间用细分隔线，顶部用 `10px uppercase tracking-widest` 小标签标注
+    - `InfoRow` 改为 `px-4 py-3`，label `w-14 text-xs text-muted-foreground`，value `font-medium text-[13px]`；mono 字段用 `rounded-md bg-muted/60 px-1.5 py-0.5 font-mono text-[11px]` 内联芯片样式
+    - 子节点 / 绑定角色 Tab 的列表项改为 `rounded-lg px-3 py-2.5 hover:bg-muted/50 transition-colors`，间距更宽松
+    - 内容区加 `overflow-y-auto pb-10`，避免长内容顶出 Header
+- 验证：
+  - `npm run lint` 通过（0 errors，2 既有 warnings）
+  - `npm run build` 通过，`/dashboard/workspaces/permissions` 正常出现在路由报告
+- 后续待办：
+  - 可选：为 Sheet 内容区接入 shadcn ScrollArea 替代原生 overflow-y
+
 ### 2026-05-04 - 权限管理页重构（0.2.1）
 
 - 完成事项：

@@ -115,9 +115,18 @@ function InfoRow({
   mono?: boolean;
 }) {
   return (
-    <div className='flex items-start gap-3 text-sm'>
-      <span className='text-muted-foreground w-16 shrink-0'>{label}</span>
-      <span className={cn('flex-1 break-all', mono && 'font-mono text-xs')}>
+    <div className='flex items-start gap-4 px-4 py-3'>
+      <span className='text-muted-foreground w-14 shrink-0 pt-px text-xs'>
+        {label}
+      </span>
+      <span
+        className={cn(
+          'flex-1 break-all text-[13px]',
+          mono
+            ? 'rounded-md bg-muted/60 px-1.5 py-0.5 font-mono text-[11px] text-foreground/80'
+            : 'font-medium'
+        )}
+      >
         {value}
       </span>
     </div>
@@ -573,122 +582,175 @@ export function PermissionsManagementClient({
 
       {/* detail sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className='min-w-[460px]'>
-          <SheetHeader>
-            <SheetTitle>{detailNode?.name ?? '权限详情'}</SheetTitle>
-            <SheetDescription className='break-all font-mono text-xs'>
-              {detailNode?.code}
-            </SheetDescription>
+        <SheetContent className='flex min-w-[480px] flex-col gap-0 p-0 sm:max-w-lg'>
+          {/* header */}
+          <SheetHeader className='border-b px-6 py-5'>
+            <div className='flex items-start gap-3 pr-6'>
+              <div className='min-w-0 flex-1'>
+                <SheetTitle className='text-base font-semibold tracking-tight'>
+                  {detailNode?.name ?? '权限详情'}
+                </SheetTitle>
+                <SheetDescription className='mt-1 break-all font-mono text-[11px] leading-relaxed'>
+                  {detailNode?.code}
+                </SheetDescription>
+              </div>
+              <div className='flex shrink-0 flex-wrap gap-1 pt-0.5'>
+                {detailNode?.isSystem ? (
+                  <Badge variant='secondary' className='px-2 py-0.5 text-[10px]'>
+                    系统内置
+                  </Badge>
+                ) : null}
+                <Badge variant='outline' className='px-2 py-0.5 text-[10px]'>
+                  {detailNode?.permissionType === 'menu' ? '菜单' : '按钮'}
+                </Badge>
+              </div>
+            </div>
           </SheetHeader>
 
           {detailNode ? (
-            <Tabs
-              value={sheetTab}
-              onValueChange={(v) => {
-                setSheetTab(v);
-                if (v === 'bindings' && bindings.length === 0 && !bindingsPending) {
-                  void loadBindings(detailNode);
-                }
-              }}
-              className='mt-4'
-            >
-              <TabsList>
-                <TabsTrigger value='info'>基本信息</TabsTrigger>
-                <TabsTrigger value='children'>子节点</TabsTrigger>
-                <TabsTrigger value='bindings'>绑定角色</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value='info' className='mt-4 space-y-3'>
-                <InfoRow label='名称' value={detailNode.name} />
-                <InfoRow label='编码' value={detailNode.code} mono />
-                <InfoRow
-                  label='类型'
-                  value={detailNode.permissionType === 'menu' ? '菜单' : '按钮'}
-                />
-                <InfoRow
-                  label='范围'
-                  value={detailNode.scope === 'workspace' ? '工作区' : '全局'}
-                />
-                <InfoRow
-                  label='路由'
-                  value={detailNode.route ?? '继承上级菜单路由'}
-                  mono
-                />
-                <InfoRow label='排序' value={String(detailNode.sortOrder)} />
-                <InfoRow
-                  label='来源'
-                  value={detailNode.isSystem ? '系统内置' : '自定义'}
-                />
-                <InfoRow
-                  label='说明'
-                  value={detailNode.description ?? '未填写说明'}
-                />
-              </TabsContent>
-
-              <TabsContent value='children' className='mt-4'>
-                {detailNode.children.length === 0 ? (
-                  <div className='text-muted-foreground py-8 text-center text-sm'>
-                    暂无子节点
-                  </div>
-                ) : (
-                  <div className='space-y-0.5'>
-                    {detailNode.children.map((child) => (
-                      <div
-                        key={child.id}
-                        className='hover:bg-muted/40 flex items-center gap-2 rounded px-2 py-1.5 text-sm'
+            <div className='flex min-h-0 flex-1 flex-col'>
+              {/* tabs bar */}
+              <div className='border-b px-6 pt-3'>
+                <Tabs
+                  value={sheetTab}
+                  onValueChange={(v) => {
+                    setSheetTab(v);
+                    if (
+                      v === 'bindings' &&
+                      bindings.length === 0 &&
+                      !bindingsPending
+                    ) {
+                      void loadBindings(detailNode);
+                    }
+                  }}
+                >
+                  <TabsList className='h-8 gap-0 rounded-none bg-transparent p-0'>
+                    {(['info', 'children', 'bindings'] as const).map((val) => (
+                      <TabsTrigger
+                        key={val}
+                        value={val}
+                        className='h-8 rounded-none border-b-2 border-transparent px-4 text-sm data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none'
                       >
-                        <Badge
-                          variant='outline'
-                          className='shrink-0 px-1.5 py-0 text-[10px]'
-                        >
-                          {child.permissionType === 'menu' ? '菜单' : '按钮'}
-                        </Badge>
-                        <span className='flex-1 truncate font-medium'>
-                          {child.name}
-                        </span>
-                        <span className='text-muted-foreground truncate font-mono text-xs'>
-                          {child.code}
-                        </span>
-                      </div>
+                        {val === 'info' ? '基本信息' : val === 'children' ? '子节点' : '绑定角色'}
+                      </TabsTrigger>
                     ))}
-                  </div>
-                )}
-              </TabsContent>
+                  </TabsList>
 
-              <TabsContent value='bindings' className='mt-4'>
-                {bindingsPending ? (
-                  <div className='flex items-center justify-center py-8'>
-                    <Loader2 className='text-muted-foreground size-5 animate-spin' />
-                  </div>
-                ) : bindings.length === 0 ? (
-                  <div className='text-muted-foreground py-8 text-center text-sm'>
-                    暂无已绑定的角色
-                  </div>
-                ) : (
-                  <div className='space-y-0.5'>
-                    {bindings.map((role) => (
-                      <div
-                        key={role.id}
-                        className='hover:bg-muted/40 flex items-center gap-2 rounded px-2 py-1.5 text-sm'
-                      >
-                        <span className='flex-1 font-medium'>{role.name}</span>
-                        {role.isSystem ? (
-                          <Badge
-                            variant='secondary'
-                            className='shrink-0 px-1.5 py-0 text-[10px]'
-                          >
-                            内置
-                          </Badge>
-                        ) : null}
-                        <span className='text-muted-foreground font-mono text-xs'>
-                          {role.key}
-                        </span>
+                  {/* scrollable content */}
+                  <div className='overflow-y-auto pb-10 pt-2'>
+                    <TabsContent value='info' className='mt-0'>
+                      {/* identity group */}
+                      <div className='py-2'>
+                        <p className='px-6 pb-1 pt-3 text-[10px] font-medium uppercase tracking-widest text-muted-foreground'>
+                          标识
+                        </p>
+                        <div className='divide-y divide-border/60'>
+                          <InfoRow label='名称' value={detailNode.name} />
+                          <InfoRow label='编码' value={detailNode.code} mono />
+                          <InfoRow
+                            label='类型'
+                            value={detailNode.permissionType === 'menu' ? '菜单' : '按钮'}
+                          />
+                          <InfoRow
+                            label='来源'
+                            value={detailNode.isSystem ? '系统内置' : '自定义'}
+                          />
+                        </div>
                       </div>
-                    ))}
+
+                      <div className='mx-6 border-t border-border/50' />
+
+                      {/* config group */}
+                      <div className='py-2'>
+                        <p className='px-6 pb-1 pt-3 text-[10px] font-medium uppercase tracking-widest text-muted-foreground'>
+                          配置
+                        </p>
+                        <div className='divide-y divide-border/60'>
+                          <InfoRow
+                            label='范围'
+                            value={detailNode.scope === 'workspace' ? '工作区' : '全局'}
+                          />
+                          <InfoRow
+                            label='路由'
+                            value={detailNode.route ?? '继承上级菜单路由'}
+                            mono
+                          />
+                          <InfoRow label='排序' value={String(detailNode.sortOrder)} />
+                          <InfoRow
+                            label='说明'
+                            value={detailNode.description ?? '未填写说明'}
+                          />
+                        </div>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value='children' className='mt-0 pt-3'>
+                      {detailNode.children.length === 0 ? (
+                        <div className='text-muted-foreground py-12 text-center text-sm'>
+                          暂无子节点
+                        </div>
+                      ) : (
+                        <div className='mx-4 space-y-0.5'>
+                          {detailNode.children.map((child) => (
+                            <div
+                              key={child.id}
+                              className='flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-muted/50'
+                            >
+                              <Badge
+                                variant='outline'
+                                className='shrink-0 px-1.5 py-0 text-[10px]'
+                              >
+                                {child.permissionType === 'menu' ? '菜单' : '按钮'}
+                              </Badge>
+                              <span className='flex-1 truncate font-medium'>
+                                {child.name}
+                              </span>
+                              <span className='text-muted-foreground truncate font-mono text-[11px]'>
+                                {child.code}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    <TabsContent value='bindings' className='mt-0 pt-3'>
+                      {bindingsPending ? (
+                        <div className='flex items-center justify-center py-12'>
+                          <Loader2 className='text-muted-foreground size-5 animate-spin' />
+                        </div>
+                      ) : bindings.length === 0 ? (
+                        <div className='text-muted-foreground py-12 text-center text-sm'>
+                          暂无已绑定的角色
+                        </div>
+                      ) : (
+                        <div className='mx-4 space-y-0.5'>
+                          {bindings.map((role) => (
+                            <div
+                              key={role.id}
+                              className='flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-muted/50'
+                            >
+                              <span className='flex-1 font-medium'>{role.name}</span>
+                              {role.isSystem ? (
+                                <Badge
+                                  variant='secondary'
+                                  className='shrink-0 px-1.5 py-0 text-[10px]'
+                                >
+                                  内置
+                                </Badge>
+                              ) : null}
+                              <span className='text-muted-foreground font-mono text-[11px]'>
+                                {role.key}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </TabsContent>
                   </div>
-                )}
-              </TabsContent>
-            </Tabs>
+                </Tabs>
+              </div>
+            </div>
           ) : null}
         </SheetContent>
       </Sheet>
